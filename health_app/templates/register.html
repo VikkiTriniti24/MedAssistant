@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% block title %}Registrieren · My Health App{% endblock %}
+
+{% block content %}
+  <h2 class="page-title">Registrieren</h2>
+
+  <div id="regMsg" class="alert hidden"></div>
+
+  <form id="regForm" class="card" style="max-width:520px;">
+    <div class="form-row">
+      <label for="email">Email</label>
+      <input id="email" type="email" class="input" required placeholder="you@example.com" autocomplete="username" />
+    </div>
+
+    <div class="form-row">
+      <label for="password">Passwort</label>
+      <input id="password" type="password" class="input" required autocomplete="new-password" />
+    </div>
+
+    <div class="form-row">
+      <label for="age">Alter (optional)</label>
+      <input id="age" type="number" class="input" min="0" max="120" />
+    </div>
+
+    <div class="form-row">
+      <label for="sex">Geschlecht (optional)</label>
+      <select id="sex" class="input">
+        <option value="">–</option>
+        <option value="female">weiblich</option>
+        <option value="male">männlich</option>
+        <option value="other">divers</option>
+        <option value="unknown">unbekannt</option>
+      </select>
+    </div>
+
+    <div class="center">
+      <button type="submit" class="btn btn-primary">Konto erstellen</button>
+    </div>
+  </form>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+(function () {
+  const $ = (s) => document.querySelector(s);
+  const msg = $("#regMsg");
+
+  function showMsg(text, type="warning") {
+    msg.textContent = text || "";
+    msg.className = `alert ${type}`;
+    if (!text) msg.classList.add("hidden"); else msg.classList.remove("hidden");
+  }
+
+  $("#regForm")?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    showMsg("Sende …", "primary");
+
+    const payload = {
+      email: $("#email")?.value?.trim(),
+      password: $("#password")?.value ?? "",
+      profile: {
+        age: $("#age")?.value ? Number($("#age").value) : null,
+        sex: $("#sex")?.value || null
+      }
+    };
+
+    try {
+      const resp = await fetch("/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await resp.json().catch(() => ({}));
+
+      if (!resp.ok) {
+        showMsg(data?.error || data?.msg || "Registrierung fehlgeschlagen.", "danger");
+        return;
+      }
+
+      showMsg("Konto erstellt. Du kannst dich jetzt einloggen.", "success");
+      setTimeout(() => { window.location.replace("/login"); }, 600);
+    } catch (err) {
+      console.error(err);
+      showMsg("Netzwerkfehler. Bitte erneut versuchen.", "danger");
+    }
+  });
+})();
+</script>
+{% endblock %}

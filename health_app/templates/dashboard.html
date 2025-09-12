@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+{% block title %}Dashboard · My Health App{% endblock %}
+
+{% block content %}
+<div class="flex items-center justify-between mb-4">
+  <h2 class="page-title">Dashboard</h2>
+</div>
+
+<!-- Diagnose-Assistent (Chat) -->
+<section class="card mb-6">
+  <div class="card-header">
+    <h3 class="card-title">Diagnose-Assistent (Chat)</h3>
+  </div>
+  <div class="card-content">
+    <div id="chat_log" class="chat-log" aria-live="polite"></div>
+
+    <div class="chat-input">
+      <input id="chat_input" class="input flex-1" type="text" placeholder="Beschreibe kurz deine Beschwerden…" />
+      <button id="chat_send" class="btn btn-primary">Senden</button>
+    </div>
+
+    <p id="chatHint" class="muted mt-2">Hinweis: Für den Chat muss man eingeloggt sein.</p>
+  </div>
+</section>
+
+<!-- Symptom Checker -->
+<section class="card mb-6">
+  <div class="card-header">
+    <h3 class="card-title">Symptom Checker</h3>
+  </div>
+  <div class="card-content">
+    <form id="symptomForm" class="grid grid-cols-1 md:grid-cols-3 gap-3">
+      <div class="md:col-span-2">
+        <label for="sc_symptoms" class="label">Symptome</label>
+        <input id="sc_symptoms" class="input w-full" placeholder="z. B. Fieber 38.1, Halsschmerzen" />
+      </div>
+      <div>
+        <label for="sc_onset" class="label">Verlauf</label>
+        <select id="sc_onset" class="input w-full">
+          <option value="unknown">unbekannt</option>
+          <option value="sudden">plötzlich</option>
+          <option value="gradual">allmählich</option>
+        </select>
+      </div>
+
+      <div class="md:col-span-3 flex items-center gap-2">
+        <button id="sc_submit" class="btn btn-primary" type="submit">Check starten</button>
+        <span id="sc_msg" class="muted"></span>
+      </div>
+    </form>
+
+    <div id="sc_view" class="mt-4 hidden">
+      <div class="result">
+        <h4>Ergebnis</h4>
+        <div id="sc_summary" class="mt-2"></div>
+        <div id="sc_list" class="mt-3"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Drug Interactions -->
+<section class="card">
+  <div class="card-header">
+    <h3 class="card-title">Drug Interactions</h3>
+  </div>
+  <div class="card-content">
+    <div class="grid grid-cols-1 md:grid-cols-5 gap-3">
+      <div class="md:col-span-2">
+        <label for="di_name" class="label">Arznei</label>
+        <input id="di_name" class="input w-full" placeholder="z. B. Ibuprofen" />
+      </div>
+      <div>
+        <label for="di_dose" class="label">Dosis</label>
+        <input id="di_dose" class="input w-full" placeholder="400 mg" />
+      </div>
+      <div>
+        <label for="di_route" class="label">Applikation</label>
+        <input id="di_route" class="input w-full" placeholder="oral" />
+      </div>
+      <div class="flex items-end">
+        <button id="di_add" class="btn w-full" type="button">+ Arznei hinzufügen</button>
+      </div>
+    </div>
+
+    <div id="di_list_wrap" class="mt-3 hidden">
+      <ul id="di_list" class="list"></ul>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mt-4">
+      <div>
+        <label for="di_allergies" class="label">Allergien</label>
+        <input id="di_allergies" class="input w-full" placeholder="z. B. Penicillin" />
+      </div>
+      <div>
+        <label for="di_conditions" class="label">Vorerkrankungen</label>
+        <input id="di_conditions" class="input w-full" placeholder="z. B. Hypertonie" />
+      </div>
+      <div class="flex items-end">
+        <button id="di_check" class="btn btn-primary w-full" type="button">Prüfen</button>
+      </div>
+    </div>
+
+    <div id="di_view" class="mt-4 hidden">
+      <div class="result">
+        <h4>Ergebnis</h4>
+        <div id="di_summary" class="mt-2"></div>
+        <div id="di_items" class="mt-2"></div>
+      </div>
+    </div>
+
+    <p id="drugHint" class="muted mt-2">Hinweis: Für die Prüfung muss man eingeloggt sein.</p>
+  </div>
+</section>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="/static/js/app.js"></script>
+{% endblock %}

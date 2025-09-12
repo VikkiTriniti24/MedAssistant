@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1, viewport-fit=cover"
+  />
+  <meta name="color-scheme" content="light" />
+  <title>{% block title %}My Health App{% endblock %}</title>
+
+  <!-- Favicon (optional; 204 No Content ist ok, falls nicht vorhanden) -->
+  <link rel="icon" href="/static/favicon.ico" />
+
+  <!-- Haupt-Stylesheet (mit Cache-Busting über Version) -->
+  <link rel="stylesheet" href="/static/css/style.css?v={{ app_version|default('dev') }}" />
+
+  {% block extra_head %}{% endblock %}
+</head>
+<body>
+  <noscript>
+    <div style="padding:12px;background:#ffefef;color:#b30000;text-align:center">
+      Diese Anwendung benötigt JavaScript.
+    </div>
+  </noscript>
+
+  <!-- Topbar / Navigation -->
+  <header class="topbar">
+    <div class="container topbar-inner">
+      <a href="/" class="brand">My Health App</a>
+      <nav class="nav">
+        <span id="authBadge" class="badge">Gast</span>
+        <a id="navLogin"    class="btn btn-ghost" href="/login">Login</a>
+        <a id="navRegister" class="btn btn-ghost" href="/register">Registrieren</a>
+        <a id="navLogout"   class="btn btn-ghost hidden" href="#">Logout</a>
+      </nav>
+    </div>
+  </header>
+
+  <!-- Hauptinhalt -->
+  <main class="container page">
+    {% block content %}{% endblock %}
+  </main>
+
+  <!-- Footer (einmalig, keine doppelte Anzeige) -->
+  <footer class="footer">
+    <div class="container footer-inner">
+      <small>v{{ app_version|default('dev') }} • {{ app_env|default('development') }}</small>
+    </div>
+  </footer>
+
+  <!-- Globale App-Logik (Token-Handling, Navbar, API-Helper) -->
+  <script src="/static/js/app.js?v={{ app_version|default('dev') }}"></script>
+
+  {% block extra_scripts %}{% endblock %}
+</body>
+</html>

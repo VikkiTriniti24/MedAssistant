@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+{% block title %}Login · My Health App{% endblock %}
+
+{% block content %}
+  <h2 class="page-title">Login</h2>
+
+  <div id="loginMsg" class="alert hidden"></div>
+
+  <form id="loginForm" class="card" style="max-width:480px;">
+    <div class="form-row">
+      <label for="email">Email</label>
+      <input id="email" name="email" type="email" class="input" required placeholder="you@example.com" autocomplete="username" />
+    </div>
+
+    <div class="form-row">
+      <label for="password">Password</label>
+      <input id="password" name="password" type="password" class="input" required autocomplete="current-password" />
+    </div>
+
+    <div class="center">
+      <button type="submit" class="btn btn-primary">Login</button>
+      <button type="button" id="btnLogout" class="btn btn-ghost">Logout</button>
+    </div>
+  </form>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+(function () {
+  const $ = (s) => document.querySelector(s);
+
+  function showMsg(text, type = "warning") {
+    const box = $("#loginMsg");
+    if (!box) return;
+    box.textContent = text || "";
+    box.className = `alert ${type}`;
+    if (!text) box.classList.add("hidden"); else box.classList.remove("hidden");
+  }
+
+  function saveToken(t) {
+    try {
+      if (t && typeof t === "string" && t.length > 20) {
+        localStorage.setItem("access_token", t);
+        localStorage.setItem("auth_flag", "1");
+      }
+    } catch (e) { console.error("localStorage save failed", e); }
+  }
+  function clearToken() {
+    localStorage.removeItem("access_token");
+    localStorage.removeItem("auth_flag");
+  }
+
+  // Bereits eingeloggt? Direkt zurück
+  (function precheck() {
+    const tok = localStorage.getItem("access_token");
+    if (tok) {
+      showMsg("Bereits eingeloggt. Weiter zum Dashboard …", "success");
+      setTimeout(() => { window.location.replace("/"); }, 300);
+    }
+  })();
+
+  $("#btnLogout")?.addEventListener("click", () => {
+    clearToken();
+    showMsg("Logged out.", "success");
+  });
+
+  $("#loginForm")?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    showMsg("Logging in…", "primary");
+
+    const email = $("#email")?.value?.trim();
+    const password = $("#password")?.value ?? "";
+
+    if (!email || !password) {
+      showMsg("Bitte E-Mail und Passwort eingeben.", "warning");
+      return;
+    }
+
+    try {
+      const resp = await fetch("/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password })
+      });
+      const data = await resp.json().catch(() => ({}));
+
+      if (!resp.ok) {
+        const err = data?.error || data?.msg || "Login fehlgeschlagen.";
+        showMsg(err, "danger");
+        return;
+      }
+
+      const token = data?.access_token;
+      if (!token) {
+        showMsg("Kein access_token in Antwort.", "danger");
+        return;
+      }
+
+      saveToken(token);
+      showMsg("Eingeloggt. Weiter zum Dashboard …", "success");
+      setTimeout(() => { window.location.replace("/"); }, 300);
+    } catch (err) {
+      console.error(err);
+      showMsg("Netzwerkfehler. Bitte erneut versuchen.", "danger");
+    }
+  });
+})();
+</script>
+{% endblock %}

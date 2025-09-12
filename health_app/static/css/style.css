@@ -1,0 +1,247 @@
+/* ---------------------------------------------------------
+   My Health App — Warm Light UI
+   Drop-in replacement for /static/css/style.css
+   Verwendet deine bestehenden Klassen.
+   --------------------------------------------------------- */
+
+:root{
+  /* Palette (warm) */
+  --bg:            #faf7f2;   /* cremig */
+  --panel:         #fffaf3;
+  --panel-2:       #fff6e9;
+
+  --text:          #2b2117;   /* warmes Dunkelbraun */
+  --text-dim:      #6b5a48;
+
+  --primary:       #f97316;   /* Orange-500 */
+  --primary-2:     #ea580c;   /* Orange-600 */
+  --ring:          rgba(249,115,22,.35);
+
+  --ok:            #16a34a;
+  --warn:          #ca8a04;
+  --danger:        #dc2626;
+
+  --line:          rgba(43,33,23,.12);
+  --input-bg:      #fffdf8;
+  --input-line:    rgba(43,33,23,.16);
+
+  --chip:          rgba(249,115,22,.14);
+
+  --shadow:        0 10px 25px rgba(73, 50, 35, .08), 0 1px 0 rgba(73, 50, 35, .06);
+  --radius:        14px;
+  --radius-sm:     10px;
+
+  --gap:           16px;
+  --gap-lg:        24px;
+}
+
+*,
+*::before,
+*::after { box-sizing: border-box; }
+
+html, body { height: 100%; background: var(--bg); color: var(--text); }
+
+body{
+  margin: 0;
+  font: 500 16px/1.6 system-ui, -apple-system, "SF Pro Text", Segoe UI, Roboto, Ubuntu, Cantarell, "Helvetica Neue", Arial;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+
+  /* sanfte, warme Akzente im Hintergrund */
+  background:
+    radial-gradient(1200px 800px at 12% -8%, #fff1e6 0%, transparent 45%),
+    radial-gradient(900px 580px at 110% 0%, #fdebd3 0%, transparent 50%),
+    var(--bg);
+}
+
+/* Layout -------------------------------------------------- */
+.container{ width: min(1100px, 92vw); margin: 28px auto 56px; }
+
+.header{
+  position: sticky; top: 0; z-index: 40;
+  backdrop-filter: saturate(160%) blur(8px);
+  background: rgba(255,249,241,.72);
+  border-bottom: 1px solid var(--line);
+}
+.header-inner{
+  width: min(1100px, 92vw);
+  margin: 0 auto;
+  padding: 12px 0;
+  display:flex; align-items:center; gap:12px;
+}
+.brand{
+  display:inline-flex; align-items:center; gap:10px;
+  color: var(--text); text-decoration:none; font-weight: 800; letter-spacing:.2px;
+}
+.brand .logo{
+  width:26px; height:26px; border-radius:8px;
+  background: linear-gradient(145deg, #fb923c, #fdba74);
+  box-shadow: 0 6px 16px rgba(249,115,22,.35), inset 0 1px 0 rgba(255,255,255,.7);
+}
+.header-actions{ margin-left:auto; display:flex; gap:8px; align-items:center; }
+
+/* Typo ---------------------------------------------------- */
+.page-title{
+  font-size: clamp(24px, 3.5vw, 34px);
+  line-height: 1.15; font-weight: 900;
+  letter-spacing: .2px; margin: 10px 0 18px;
+}
+
+/* Cards --------------------------------------------------- */
+.card{
+  background: linear-gradient(180deg, var(--panel), var(--panel-2));
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  overflow:hidden;
+}
+.card + .card{ margin-top: 20px; }
+
+.card-header{
+  padding: 14px 18px 10px;
+  border-bottom: 1px solid var(--line);
+  background: linear-gradient(180deg, rgba(249,115,22,.06), transparent);
+}
+.card-title{ margin:0; font-size:18px; font-weight:800; }
+
+.card-content{ padding: 16px 18px 18px; }
+
+/* Inputs -------------------------------------------------- */
+.label{ display:block; font-size:13px; color: var(--text-dim); margin: 4px 0 6px; }
+
+.input{
+  width:100%;
+  border:1px solid var(--input-line);
+  background: var(--input-bg);
+  color: var(--text);
+  border-radius:12px;
+  padding:12px 12px;
+  outline:none;
+  transition: border-color .15s, box-shadow .15s, background .2s;
+}
+.input::placeholder{ color:#8c7b69; }
+.input:focus{
+  border-color: var(--primary);
+  box-shadow: 0 0 0 4px var(--ring);
+  background:#fffaf3;
+}
+textarea.input{ min-height: 120px; resize: vertical; }
+
+/* Buttons ------------------------------------------------- */
+.btn{
+  --btn-bg: #fff5eb;
+  --btn-bg-h: #ffeeda;
+  --btn-fg: var(--text);
+  display:inline-flex; align-items:center; justify-content:center; gap:8px;
+  border:1px solid var(--input-line);
+  background: var(--btn-bg);
+  color: var(--btn-fg);
+  padding: 10px 14px;
+  border-radius: 12px;
+  cursor:pointer; text-decoration:none; user-select:none;
+  transition: transform .08s ease, box-shadow .18s ease, background .18s ease, border-color .18s ease;
+  box-shadow: 0 6px 14px rgba(73,50,35,.06);
+}
+.btn:hover{ background: var(--btn-bg-h); border-color: rgba(43,33,23,.2); }
+.btn:active{ transform: translateY(1px); }
+
+.btn-primary{
+  --btn-bg: linear-gradient(180deg, var(--primary), var(--primary-2));
+  --btn-bg-h: linear-gradient(180deg, #fb923c, #c2410c);
+  --btn-fg: #fff;
+  border-color: rgba(43,33,23,.18);
+  box-shadow: 0 10px 20px rgba(249,115,22,.28), inset 0 1px 0 rgba(255,255,255,.35);
+  color:#fff;
+}
+
+.btn-ghost{
+  --btn-bg: transparent;
+  --btn-bg-h: rgba(249,115,22,.10);
+  border-color: rgba(43,33,23,.16);
+}
+
+/* Badges -------------------------------------------------- */
+.badge{
+  display:inline-flex; align-items:center; gap:8px;
+  font-size:12px; padding:6px 10px; border-radius:999px;
+  background: var(--chip); color:#6b2d04; border:1px solid rgba(249,115,22,.25);
+}
+
+/* Lists --------------------------------------------------- */
+.list{ list-style:none; margin:0; padding:0; }
+.list li{
+  padding:10px 12px; border-radius:10px;
+  border:1px solid var(--input-line);
+  background:#fff7ed; color:var(--text);
+}
+.list li + li{ margin-top:8px; }
+
+/* Chat ---------------------------------------------------- */
+.chat-log{
+  display:grid; gap:10px;
+  padding:8px; border:1px solid var(--input-line);
+  border-radius:14px; background:#fff7ed;  /* orange-50 */
+  max-height:320px; overflow:auto;
+}
+.chat-msg{
+  max-width:85%;
+  padding:10px 12px; border-radius:12px;
+  border:1px solid var(--input-line);
+  line-height:1.5; background:#fffdfa;
+  box-shadow: 0 6px 14px rgba(73,50,35,.06);
+}
+.chat-msg.me{
+  margin-left:auto;
+  background:#ffe7cf;                      /* warme Blase für eigene Msg */
+  border-color: rgba(249,115,22,.30);
+}
+.chat-msg .meta{ display:block; font-size:12px; color: var(--text-dim); margin-bottom:4px; }
+
+.chat-input{ margin-top:12px; display:flex; gap:10px; align-items:center; }
+
+/* Results ------------------------------------------------- */
+.result{
+  border:1px solid var(--input-line);
+  border-radius:12px;
+  background:#fffdfa;
+  padding:12px;
+}
+.result h4{ margin:4px 0 8px; font-size:16px; font-weight:800; }
+
+/* Simple grid helpers ------------------------------------ */
+.grid{ display:grid; gap: var(--gap); }
+.grid.cols-2{ grid-template-columns: 1fr 1fr; }
+@media (max-width: 900px){ .grid.cols-2{ grid-template-columns: 1fr; } }
+
+/* Utilities ---------------------------------------------- */
+.hidden{ display:none !important; }
+.muted{ color: var(--text-dim); }
+.center{ display:flex; align-items:center; justify-content:center; gap:10px; }
+.flex{ display:flex; }
+.items-center{ align-items:center; }
+.justify-between{ justify-content: space-between; }
+.gap-2{ gap: 8px; }
+.mt-2{ margin-top: 8px; }
+.mt-3{ margin-top: 12px; }
+.mt-4{ margin-top: 16px; }
+.mb-4{ margin-bottom: 16px; }
+
+/* Footer -------------------------------------------------- */
+.footer{
+  width: min(1100px, 92vw);
+  margin: 28px auto 40px;
+  color: var(--text-dim);
+  font-size:14px;
+  display:flex; gap:8px; align-items:center;
+  border-top:1px solid var(--line);
+  padding-top:16px;
+}
+.footer a{ color: #b45309; text-decoration:none; }
+.footer a:hover{ text-decoration: underline; }
+
+/* a11y ---------------------------------------------------- */
+:focus-visible{
+  outline: 3px solid var(--ring);
+  outline-offset: 2px;
+  border-radius: 10px;
+}
