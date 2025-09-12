@@ -1,0 +1,58 @@
+# ---------- Python / Build ----------
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg-info/
+dist/
+build/
+
+# ---------- Virtualenv ----------
+.venv/
+venv/
+ENV/
+
+# ---------- Secrets / Environment ----------
+.env
+*.env
+.env.*        # z.B. .env.local, .env.dev
+
+# ---------- Flask instance (DB, uploads, lokale config) ----------
+instance/
+!instance/.gitkeep  # Platzhalter behalten
+
+# Falls du instance nur teilweise ignorieren willst, alternativ:
+# instance/*.db
+# instance/*.sqlite
+# instance/uploads/
+# instance/*.cfg
+
+# ---------- SQLite (falls außerhalb von instance/) ----------
+*.db
+*.sqlite3
+
+# ---------- Tests / Coverage ----------
+.pytest_cache/
+.coverage
+htmlcov/
+
+# ---------- Logs ----------
+*.log
+logs/
+
+# ---------- IDE ----------
+.idea/
+.vscode/
+*.iml
+
+# ---------- OS / Sonstiges ----------
+.DS_Store
+Thumbs.db
+
+# ---------- Node/Frontend (falls gebraucht) ----------
+node_modules/
+*.tsbuildinfo
+
+# ---------- Migrations Cache ----------
+migrations/**/__pycache__/
