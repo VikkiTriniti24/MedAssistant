@@ -65,8 +65,9 @@
   }
 
   function showHintIfExists(needLogin) {
-    const chatHint = $("#chat_hint");
-    const diHint   = $("#di_hint");
+    // Support both template IDs: chat_hint/chatHint and di_hint/drugHint
+    const chatHint = document.getElementById("chat_hint") || document.getElementById("chatHint");
+    const diHint   = document.getElementById("di_hint")   || document.getElementById("drugHint");
     if (chatHint) chatHint.style.display = needLogin ? "" : "none";
     if (diHint)   diHint.style.display   = needLogin ? "" : "none";
   }
