@@ -74,7 +74,14 @@ def _fetch_drugs_map(names: List[str]) -> Tuple[Dict[str, Drug], List[str]]:
     Returns (mapping lc_name -> Drug, unrecognized list).
     """
     lc_names = [_to_lc(n) for n in names]
-    rows = Drug.query.filter(Drug.name.in_(names) | Drug.name.in_(lc_names)).all()
+    if not lc_names:
+        return {}, lc_names
+
+    rows = (
+        Drug.query
+        .filter(db.func.lower(Drug.name).in_(lc_names))
+        .all()
+    )
     by_name = {}
     for r in rows:
         by_name[_to_lc(r.name)] = r
