@@ -1,7 +1,7 @@
 """add medication schedules table
 
 Revision ID: 20251003_add_medication_schedule
-Revises: 20251002_add_user_preferences
+Revises: add_mfa_totp
 Create Date: 2025-10-03 00:00:00.000000
 """
 
@@ -11,7 +11,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = "20251003_add_medication_schedule"
-down_revision = "20251002_add_user_preferences"
+down_revision = "add_mfa_totp"
 branch_labels = None
 depends_on = None
 

@@ -18,10 +18,50 @@ from dotenv import load_dotenv
 
 from .utils.rate_limit import PersistentRateLimiter, SimpleRateLimiter
 
+
+DEV_SECRET_KEY_DEFAULT = "dev-secret"
+DEV_JWT_SECRET_DEFAULT = "dev-jwt-secret"
+
+
+def _enforce_production_secrets(app: Flask) -> None:
+    env = (app.config.get("ENV") or "").strip().lower()
+    if env in {"development", "dev", "testing", "test"}:
+        return
+
+    secrets_invalid: list[str] = []
+    secret_key = (app.config.get("SECRET_KEY") or "").strip()
+    if not secret_key or secret_key == DEV_SECRET_KEY_DEFAULT:
+        secrets_invalid.append("SECRET_KEY")
+
+    jwt_secret = (app.config.get("JWT_SECRET_KEY") or "").strip()
+    if not jwt_secret or jwt_secret == DEV_JWT_SECRET_DEFAULT:
+        secrets_invalid.append("JWT_SECRET_KEY")
+
+    if secrets_invalid:
+        raise RuntimeError(
+            "Production startup aborted: provide strong values for "
+            f"{', '.join(secrets_invalid)}. See docs/deployment.md#production-secrets."
+        )
+
 # --- Extensions --------------------------------------------------------------
 db = SQLAlchemy()
 jwt = JWTManager()
 migrate = Migrate()
+
+
+@jwt.token_in_blocklist_loader
+def _is_token_revoked(jwt_header: dict, jwt_payload: dict) -> bool:
+    if jwt_payload.get("type") != "refresh":
+        return False
+
+    jti = jwt_payload.get("jti")
+    if not jti:
+        return True
+
+    from .services.token_service import is_refresh_token_revoked
+
+    return is_refresh_token_revoked(jti)
+
 
 logger = logging.getLogger("health_app")
 if not logger.handlers:
@@ -55,7 +95,7 @@ def create_app() -> Flask:
     max_body_bytes = int(os.getenv("MAX_CONTENT_LENGTH", "1048576"))
     app.config.from_mapping(
         # Flask
-        SECRET_KEY=os.getenv("SECRET_KEY", "dev-secret"),
+        SECRET_KEY=os.getenv("SECRET_KEY", DEV_SECRET_KEY_DEFAULT),
         ENV=os.getenv("FLASK_ENV", os.getenv("ENV", "development")),
         VERSION=os.getenv("VERSION", "0.1.0"),
         JSON_SORT_KEYS=False,
@@ -105,7 +145,7 @@ def create_app() -> Flask:
         SQLALCHEMY_TRACK_MODIFICATIONS=False,
 
         # JWT
-        JWT_SECRET_KEY=os.getenv("JWT_SECRET_KEY", "dev-jwt-secret"),
+        JWT_SECRET_KEY=os.getenv("JWT_SECRET_KEY", DEV_JWT_SECRET_DEFAULT),
         JWT_TOKEN_LOCATION=["headers", "cookies"],
         JWT_HEADER_NAME=os.getenv("JWT_HEADER_NAME", "Authorization"),
         JWT_HEADER_TYPE=os.getenv("JWT_HEADER_TYPE", "Bearer"),
@@ -124,11 +164,11 @@ def create_app() -> Flask:
     # Optional instance overrides
     app.config.from_pyfile("config.py", silent=True)
 
+    _enforce_production_secrets(app)
+
     # Init extensions
     db.init_app(app)
-    from flask_jwt_extended import JWTManager
-
-    JWTManager(app)  # init, Variable nicht nötig
+    jwt.init_app(app)
     migrate.init_app(app, db)
 
     # ---- Dev DB bootstrap (inside app context!) ----------------------------
@@ -255,6 +295,38 @@ def create_app() -> Flask:
     except Exception:
         # Fallback to in-memory limiter if DB setup fails early
         app.extensions["rate_limiter"] = SimpleRateLimiter()
+
+    @app.cli.command("invalidate-refresh-tokens")
+    @click.option("--user-id", type=int, help="Revoke tokens for the given user id")
+    @click.option("--email", help="Revoke tokens for the given user email")
+    @click.option("--all", "revoke_all_flag", is_flag=True, help="Revoke tokens for all users")
+    def invalidate_refresh_tokens(user_id: Optional[int], email: Optional[str], revoke_all_flag: bool) -> None:
+        """CLI helper to revoke refresh tokens for users or globally."""
+        from .models import User
+        from .services.token_service import (
+            revoke_all_refresh_tokens,
+            revoke_user_refresh_tokens,
+        )
+
+        if revoke_all_flag:
+            count = revoke_all_refresh_tokens(reason="admin-cli")
+            click.echo(f"Revoked {count} refresh tokens across all users")
+            return
+
+        if not user_id and not email:
+            raise click.BadParameter("Provide --user-id or --email to revoke tokens")
+
+        user = None
+        if user_id:
+            user = User.query.filter_by(id=user_id).first()
+        elif email:
+            user = User.query.filter_by(email=email.lower()).first()
+
+        if not user:
+            raise click.BadParameter("User not found")
+
+        count = revoke_user_refresh_tokens(user.id, reason="admin-cli")
+        click.echo(f"Revoked {count} refresh tokens for user {user.email}")
 
     @app.cli.command("backup-db")
     @click.option(

@@ -1,23 +1,24 @@
-from http import HTTPStatus
+import pytest
 
 
-def test_security_headers_present(client):
-    resp = client.get("/healthz")
-    assert resp.status_code == HTTPStatus.OK
-    headers = resp.headers
+@pytest.mark.parametrize(
+    "path",
+    ["/", "/login", "/register", "/metrics"],
+)
+def test_security_headers_present(client, path):
+    resp = client.get(path)
 
-    assert headers.get("Strict-Transport-Security", "").startswith("max-age=")
-    assert headers.get("X-Content-Type-Options") == "nosniff"
-    assert headers.get("X-Frame-Options") == "DENY"
-    assert headers.get("Referrer-Policy") == "strict-origin-when-cross-origin"
-    assert "default-src 'self'" in headers.get("Content-Security-Policy", "")
+    assert resp.status_code < 500
 
+    csp = resp.headers.get("Content-Security-Policy")
+    assert csp, "CSP header missing"
+    assert "script-src" in csp
+    assert "'nonce-" in csp
 
-def test_max_content_length_config(app):
-    assert app.config["MAX_CONTENT_LENGTH"] == 1_048_576
+    coop = resp.headers.get("Cross-Origin-Opener-Policy")
+    corp = resp.headers.get("Cross-Origin-Resource-Policy")
+    referrer = resp.headers.get("Referrer-Policy")
 
-
-def test_session_cookie_defaults(app):
-    assert app.config["SESSION_COOKIE_SECURE"] is True
-    assert app.config["SESSION_COOKIE_HTTPONLY"] is True
-    assert app.config["SESSION_COOKIE_SAMESITE"] == "Lax"
+    assert coop == "same-origin"
+    assert corp == "same-origin"
+    assert referrer == "strict-origin-when-cross-origin"

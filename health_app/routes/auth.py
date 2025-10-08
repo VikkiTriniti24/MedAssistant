@@ -11,6 +11,7 @@ from flask_jwt_extended import (
     create_refresh_token,
     jwt_required,
     get_jwt_identity,
+    get_jwt,
     set_refresh_cookies,
     unset_jwt_cookies,
 )
@@ -29,6 +30,11 @@ from ..utils.rate_limit import enforce_rate_limit
 from ..utils.email import send_password_reset_email, send_email_verification
 from ..utils.i18n import resolve_user_language
 from ..utils.totp import generate_secret as totp_generate_secret, verify_totp, build_otpauth_uri
+from ..services.token_service import (
+    register_refresh_token,
+    revoke_refresh_token,
+    revoke_user_refresh_tokens,
+)
 
 # Blueprint wird in __init__.py unter url_prefix="/auth" registriert
 auth_bp = Blueprint("auth", __name__)
@@ -194,6 +200,8 @@ def register():
         access_token = create_access_token(identity=str(user.id), additional_claims={"role": "user"})
         refresh_token = create_refresh_token(identity=str(user.id))
 
+        register_refresh_token(user.id, refresh_token)
+
         resp = jsonify({
             "access_token": access_token,
             "verification_token": verification_token,
@@ -288,7 +296,8 @@ def login():
 
         user.failed_login_attempts = 0
         user.locked_until = None
-        db.session.commit()
+
+        register_refresh_token(user.id, refresh_token)
 
         resp = jsonify({
             "access_token": access_token,
@@ -526,6 +535,27 @@ def refresh_access_token():
     }), HTTPStatus.OK
 
 
+@auth_bp.post("/logout")
+@jwt_required(refresh=True)
+def logout():
+    payload = get_jwt()
+    jti = payload.get("jti")
+    identity = get_jwt_identity()
+
+    if not jti:
+        return jsonify({"msg": "token missing jti"}), HTTPStatus.BAD_REQUEST
+
+    try:
+        revoke_refresh_token(jti, user_id=int(identity) if identity is not None else None, reason="logout")
+    except Exception as exc:
+        current_app.logger.exception("logout failed: %s", exc)
+        return jsonify({"msg": "internal error"}), HTTPStatus.INTERNAL_SERVER_ERROR
+
+    resp = jsonify({"msg": "logout successful"})
+    unset_jwt_cookies(resp)
+    return resp, HTTPStatus.OK
+
+
 @auth_bp.post("/reset/confirm")
 def confirm_password_reset():
     data = request.get_json(silent=True) or {}
@@ -560,7 +590,7 @@ def confirm_password_reset():
             new_password, method="pbkdf2:sha256", salt_length=16
         )
         reset.used_at = datetime.utcnow()
-        db.session.commit()
+        revoke_user_refresh_tokens(user.id, reason="password-reset")
         return jsonify({"msg": "password updated"}), HTTPStatus.OK
     except Exception as exc:
         current_app.logger.exception("password reset failed: %s", exc)

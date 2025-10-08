@@ -1,4 +1,6 @@
 # health_app/utils/dev_setup.py
+from __future__ import annotations
+
 from typing import Optional, TYPE_CHECKING
 
 from flask import current_app

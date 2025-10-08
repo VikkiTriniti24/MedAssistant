@@ -474,6 +474,19 @@ class EmailVerificationToken(db.Model):
     )
 
 
+class RevokedToken(db.Model):
+    __tablename__ = "revoked_tokens"
+
+    id             = db.Column(db.Integer, primary_key=True)
+    user_id        = db.Column(db.Integer, FK("users.id", ondelete="CASCADE"), index=True)
+    jti            = db.Column(db.String(64), nullable=False, unique=True, index=True)
+    token_type     = db.Column(db.String(16), nullable=False, default="refresh")
+    issued_at      = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    expires_at     = db.Column(db.DateTime)
+    revoked_at     = db.Column(db.DateTime)
+    revoked_reason = db.Column(db.String(255))
+
+
 class MFAConfig(db.Model):
     __tablename__ = "mfa_totp_configs"
 

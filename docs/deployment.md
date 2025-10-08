@@ -22,7 +22,7 @@ pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-Create `.env` (or export vars via systemd service):
+Create `.env` (or export vars via systemd service). A template is available at `.env.example`:
 ```env
 FLASK_ENV=production
 SECRET_KEY=<random>
@@ -51,6 +51,16 @@ MAIL_DEFAULT_SENDER=no-reply@example.com
 EMAIL_VERIFICATION_URL=https://your-host/auth/verify
 EMAIL_VERIFICATION_TOKEN_MINUTES=60
 ```
+
+## Production Secrets
+
+MedAssistant refuses to boot in production-like environments when development defaults are present. Before deploying:
+
+- Generate strong, unique values for both `SECRET_KEY` and `JWT_SECRET_KEY` (for example, run `python -c "import secrets; print(secrets.token_urlsafe(64))"`).
+- Set `FLASK_ENV=production` (or `ENV=production`) on the target host.
+- Store the generated secrets outside version control (systemd environment file, secrets manager, etc.).
+
+If the server logs "Production startup aborted", revisit the rollout checklist in [Section&nbsp;10](#10-checklist) and update the secrets.
 
 ## 3. Initialize Database
 ```bash
@@ -143,6 +153,7 @@ sudo systemctl restart medassistant
 - AI key errors: set `AI_STUB=1` for offline mode or configure `OPENAI_API_KEY`.
 - AI fallback text in the wrong language: export `AI_FALLBACK_LANGUAGE=en` (or override `AI_FALLBACK_PREFIX`/`AI_FALLBACK_LINES`).
 - Backups failing: verify SQLite path and permissions.
+- Refresh tokens still valid after a security incident: run `flask --app health_app invalidate-refresh-tokens --all` (or target a user via `--email` / `--user-id`) to revoke outstanding sessions.
 
 ## 10. Checklist
 - [ ] Environment variables configured
