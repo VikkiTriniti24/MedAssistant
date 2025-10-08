@@ -43,6 +43,7 @@
 <script>
 (function () {
   const $ = (s) => document.querySelector(s);
+  const tr = (key) => (window.I18n ? window.I18n.t(key) : key);
   const msg = $("#regMsg");
 
   function showMsg(text, type="warning") {
@@ -53,7 +54,7 @@
 
   $("#regForm")?.addEventListener("submit", async (e) => {
     e.preventDefault();
-    showMsg("Sende …", "primary");
+    showMsg(tr("auth.register.submitting"), "primary");
 
     const payload = {
       email: $("#email")?.value?.trim(),
@@ -73,15 +74,23 @@
       const data = await resp.json().catch(() => ({}));
 
       if (!resp.ok) {
-        showMsg(data?.error || data?.msg || "Registrierung fehlgeschlagen.", "danger");
+        const message = data?.msg || data?.error || tr("auth.register.failure");
+        if (resp.status === 409) {
+          showMsg(`${message} · ${tr("auth.register.suggestion_login")}`, "danger");
+        } else if (resp.status === 400) {
+          const hints = [tr("auth.register.hint_password"), tr("auth.register.hint_strength")];
+          showMsg(`${message} · ${hints.join(" ")}`, "danger");
+        } else {
+          showMsg(message, "danger");
+        }
         return;
       }
 
-      showMsg("Konto erstellt. Du kannst dich jetzt einloggen.", "success");
+      showMsg(tr("auth.register.success"), "success");
       setTimeout(() => { window.location.replace("/login"); }, 600);
     } catch (err) {
       console.error(err);
-      showMsg("Netzwerkfehler. Bitte erneut versuchen.", "danger");
+      showMsg(tr("auth.register.network_error"), "danger");
     }
   });
 })();

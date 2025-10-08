@@ -14,6 +14,9 @@ def app_root():
 @pytest.fixture()
 def app(tmp_path, monkeypatch):
     """Create an app per test with isolated SQLite DB."""
+    monkeypatch.setenv("AI_STUB", "1")
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+
     app = create_app()
     db_path = Path(tmp_path) / "test.db"
 
@@ -24,13 +27,44 @@ def app(tmp_path, monkeypatch):
         JWT_SECRET_KEY="test-jwt",     # Test-Secret
         VERSION="test",
         ENV="testing",
+        JWT_ACCESS_TOKEN_EXPIRES=60,
+        JWT_REFRESH_TOKEN_EXPIRES=600,
+        JWT_REFRESH_COOKIE_SECURE=False,
+        JWT_COOKIE_CSRF_PROTECT=False,
     )
 
     # Optional: AI-Service stumm schalten, falls /chat/ getestet wird
-    monkeypatch.setenv("OPENAI_API_KEY", "test-key")  # verhindert asserts in libs
     try:
         import health_app.services.ai_service as ai
         monkeypatch.setattr(ai, "chat_raw", lambda *a, **k: "[mocked ai reply]")
+        monkeypatch.setattr(
+            ai,
+            "chat_json",
+            lambda *a, **k: {
+                "overdose_alerts": [],
+                "interactions": [],
+                "contraindications": [],
+                "dosage_guidance": [],
+                "side_effects": [],
+                "diagnoses": [
+                    {
+                        "condition": "Mock Condition",
+                        "probability": 0.4,
+                        "triage": "medium",
+                    }
+                ],
+                "risk_evaluation": {"risk_level": "low", "urgency": "self-care"},
+                "recommendations": ["Rest", "Hydrate"],
+                "differential_diagnosis": [
+                    {
+                        "condition": "Alternative Mock",
+                        "likelihood": 0.2,
+                        "rationale": "Symptoms overlap"
+                    }
+                ],
+            },
+        )
+        monkeypatch.setattr(ai, "is_stub_mode", lambda: True)
     except Exception:
         pass
 
@@ -73,3 +107,8 @@ def auth_headers(access_token):
         "Authorization": f"Bearer {access_token}",
         "Content-Type": "application/json",
     }
+
+# Compat: some integration scripts expect a 'token' fixture
+@pytest.fixture()
+def token(access_token):
+    return access_token

@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="de">
+<html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta
@@ -9,15 +9,29 @@
   <meta name="color-scheme" content="light" />
   <title>{% block title %}My Health App{% endblock %}</title>
 
-  <!-- Favicon (optional; 204 No Content ist ok, falls nicht vorhanden) -->
-  <link rel="icon" href="/static/favicon.ico" />
+  <!-- Favicon -->
+  <link rel="icon" href="/static/images/favicon.svg" type="image/svg+xml" />
+  <link rel="alternate icon" href="/static/images/favicon.svg" />
 
   <!-- Haupt-Stylesheet (mit Cache-Busting über Version) -->
   <link rel="stylesheet" href="/static/css/style.css?v={{ app_version|default('dev') }}" />
 
+  <script>
+    // Respect user system preference on first load
+    (function(){
+      try{
+        var pref = localStorage.getItem('theme');
+        if(!pref){
+          pref = (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
+        }
+        document.documentElement.dataset.theme = pref;
+      }catch(e){ /* ignore */ }
+    })();
+  </script>
   {% block extra_head %}{% endblock %}
 </head>
 <body>
+  <a class="skip-link" href="#main-content">Zum Inhalt springen</a>
   <noscript>
     <div style="padding:12px;background:#ffefef;color:#b30000;text-align:center">
       Diese Anwendung benötigt JavaScript.
@@ -33,14 +47,21 @@
         <a id="navLogin"    class="btn btn-ghost" href="/login">Login</a>
         <a id="navRegister" class="btn btn-ghost" href="/register">Registrieren</a>
         <a id="navLogout"   class="btn btn-ghost hidden" href="#">Logout</a>
+        <button id="themeToggle" class="btn btn-ghost" aria-label="Theme umschalten">🌓</button>
       </nav>
     </div>
   </header>
 
   <!-- Hauptinhalt -->
-  <main class="container page">
+  <main id="main-content" class="container page">
     {% block content %}{% endblock %}
   </main>
+
+  <!-- Toasts -->
+  <div id="toasts" aria-live="polite" aria-atomic="true"></div>
+
+  <!-- Global Loading Spinner -->
+  <div id="spinner" class="spinner hidden" aria-hidden="true"></div>
 
   <!-- Footer (einmalig, keine doppelte Anzeige) -->
   <footer class="footer">
@@ -49,6 +70,7 @@
     </div>
   </footer>
 
+  <script src="/static/js/i18n.js?v={{ app_version|default('dev') }}"></script>
   <!-- Globale App-Logik (Token-Handling, Navbar, API-Helper) -->
   <script src="/static/js/app.js?v={{ app_version|default('dev') }}"></script>
 

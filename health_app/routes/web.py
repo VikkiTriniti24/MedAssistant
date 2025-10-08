@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 import time
 
 from flask import Blueprint, render_template, jsonify, current_app
+from flask import Response
 
 # Blueprint for all web pages (registered without prefix)
 web_bp = Blueprint("web", __name__)
@@ -76,3 +77,11 @@ def favicon():
     Later you can serve a real icon from /static via send_from_directory.
     """
     return ("", HTTPStatus.NO_CONTENT)
+
+
+@web_bp.get("/metrics")
+def metrics():
+    from ..metrics import render_metrics
+
+    payload = render_metrics()
+    return Response(payload, mimetype="text/plain")

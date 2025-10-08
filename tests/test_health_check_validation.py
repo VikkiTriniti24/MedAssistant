@@ -1,5 +1,10 @@
 # tests/test_health_check_validation.py
 
+import pytest
+
+
+pytestmark = pytest.mark.slow
+
 def test_health_check_missing_symptoms(client, auth_headers):
     r = client.post("/health-check/", headers=auth_headers, json={})
     assert r.status_code == 400

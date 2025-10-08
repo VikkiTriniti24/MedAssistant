@@ -7,6 +7,8 @@ import logging
 from typing import Any, Dict, List, Optional
 
 from dotenv import load_dotenv
+from ..utils.i18n import normalize_language
+from ..metrics import track_ai_fallback
 
 # -----------------------------------------------------------------------------
 # Logging
@@ -21,6 +23,58 @@ load_dotenv()
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 DEFAULT_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 _ENV = (os.getenv("FLASK_ENV") or os.getenv("ENV") or "development").lower()
+_ALLOW_FALLBACK = os.getenv("AI_ALLOW_FALLBACK", "1").strip().lower() not in {"0", "false", "no"}
+
+_FALLBACK_LANGUAGE = normalize_language(os.getenv("AI_FALLBACK_LANGUAGE", "de"))
+_FALLBACK_TEMPLATES: Dict[str, Dict[str, Any]] = {
+    "de": {
+        "prefix": "MedAssistant-Notfallantwort:",
+        "header": "Ich konnte den Live-Gesundheitsassistenten{context} nicht erreichen.",
+        "lines": [
+            "Diese Hinweise ersetzen keine ärztliche Beratung.",
+            "Rufen Sie bei Brustschmerzen, Atemnot, Verwirrtheit oder starkem Unwohlsein den Notruf.",
+            "Kontaktieren Sie Ihre Hausärztin/Ihren Hausarzt oder eine medizinische Hotline, wenn Beschwerden anhalten oder sich verschlimmern.",
+            "Bitte beobachten Sie Ihre Symptome, ruhen Sie sich aus und trinken Sie ausreichend Flüssigkeit, bis Sie professionelle Hilfe erhalten.",
+        ],
+    },
+    "en": {
+        "prefix": "MedAssistant fallback response:",
+        "header": "I could not reach the live medical assistant{context}.",
+        "lines": [
+            "This information is general and does not replace professional medical advice.",
+            "Seek urgent care or call emergency services if you have chest pain, trouble breathing, confusion, or severe symptoms.",
+            "For ongoing or worsening issues, contact your healthcare provider or an urgent care clinic.",
+            "Monitor your symptoms, stay hydrated, and rest while you arrange professional follow-up.",
+        ],
+    },
+}
+
+_fallback_template = _FALLBACK_TEMPLATES.get(_FALLBACK_LANGUAGE, _FALLBACK_TEMPLATES["en"])
+_FALLBACK_REASON_MAP = {
+    "de": {
+        "stub mode active": "Stub-Modus aktiv",
+        "temporary service interruption": "vorübergehende Dienstunterbrechung",
+    },
+    "en": {
+        "stub mode active": "stub mode active",
+        "temporary service interruption": "temporary service interruption",
+    },
+}
+FALLBACK_PREFIX = os.getenv("AI_FALLBACK_PREFIX", _fallback_template["prefix"])
+_FALLBACK_LINES_RAW = os.getenv("AI_FALLBACK_LINES")
+if _FALLBACK_LINES_RAW:
+    _FALLBACK_LINES = [
+        line.strip()
+        for line in _FALLBACK_LINES_RAW.split("|")
+        if line.strip()
+    ]
+else:
+    _FALLBACK_LINES = list(_fallback_template["lines"])
+
+FALLBACK_PREFIXES = {
+    FALLBACK_PREFIX,
+    *[tmpl["prefix"] for tmpl in _FALLBACK_TEMPLATES.values()],
+}
 
 # Optionaler Schalter zum Erzwingen des Stub-Modus (bequem in Dev/Tests)
 # .env: AI_STUB=1  (oder "true"/"yes")
@@ -90,18 +144,87 @@ def _last_user_text(messages: List[Dict[str, Any]]) -> str:
     last_user = next((m for m in reversed(messages) if m.get("role") == "user"), None)
     return ((last_user or {}).get("content") or "").strip()
 
-def _stub_text(messages: List[Dict[str, Any]]) -> str:
-    """Deterministic stub reply for dev/testing without API key."""
-    content = _last_user_text(messages)
-    reply = f"[stub:{DEFAULT_MODEL}] {content}".strip() or "[stub:ok]"
-    log.debug("Stub-Antwort erzeugt: %s", reply[:120])
+def _safe_fallback_text(
+    user_text: str,
+    *,
+    reason: str,
+    language: Optional[str] = None,
+) -> str:
+    """Return a user-facing fallback with safety guidance and clear context."""
+    lang = normalize_language(language or _FALLBACK_LANGUAGE)
+    template = _FALLBACK_TEMPLATES.get(lang, _FALLBACK_TEMPLATES["en"])
+
+    snippet = (user_text or "").strip()
+    if len(snippet) > 160:
+        snippet = snippet[:157].rstrip() + "..."
+
+    if snippet:
+        if lang == "de":
+            context_line = f" für \"{snippet}\""
+        else:
+            context_line = f" for \"{snippet}\""
+    else:
+        context_line = ""
+
+    local_reason = reason
+    translated_reason = _FALLBACK_REASON_MAP.get(lang, {}).get(reason)
+    if translated_reason:
+        local_reason = translated_reason
+
+    header_template = template.get(
+        "header",
+        "I could not reach the live medical assistant{context}.",
+    )
+    header_body = header_template.format(context=context_line)
+    prefix = FALLBACK_PREFIX if lang == _FALLBACK_LANGUAGE else template.get("prefix", FALLBACK_PREFIX)
+    header = f"{prefix} {local_reason}. {header_body}".strip()
+
+    if lang == _FALLBACK_LANGUAGE and _FALLBACK_LINES_RAW:
+        lines = _FALLBACK_LINES
+    else:
+        lines = template.get("lines", _FALLBACK_TEMPLATES["en"]["lines"])
+
+    body = "\n" + "\n".join(f"- {line}" for line in lines)
+    reply = header + body
+    track_ai_fallback(lang, reason)
+    log.debug("Safe fallback response erzeugt: %s", reply[:180])
     return reply
 
+
+def _stub_text(messages: List[Dict[str, Any]], *, language: Optional[str] = None) -> str:
+    """Safe textual fallback in environments where the live model is unavailable."""
+    return _safe_fallback_text(
+        _last_user_text(messages),
+        reason="stub mode active",
+        language=language,
+    )
+
 def _stub_json() -> Dict[str, Any]:
-    """Deterministic JSON stub."""
+    """Deterministic JSON stub with more realistic medical responses."""
     payload = {
-        "diagnoses": [{"condition": "Example condition", "probability": 0.5, "triage": "medium"}],
-        "risk_evaluation": {"risk_level": "medium", "urgency": "see-doctor"},
+        "diagnoses": [
+            {"condition": "Common cold (Viral upper respiratory infection)", "probability": 0.75, "triage": "low"},
+            {"condition": "Seasonal allergies", "probability": 0.15, "triage": "low"},
+            {"condition": "Mild dehydration", "probability": 0.10, "triage": "low"}
+        ],
+        "risk_evaluation": {"risk_level": "low", "urgency": "self-care"},
+        "recommendations": [
+            "Rest and stay hydrated",
+            "Monitor symptoms for 3-5 days",
+            "Seek medical attention if symptoms worsen"
+        ],
+        "differential_diagnosis": [
+            {
+                "condition": "Influenza",
+                "likelihood": 0.4,
+                "rationale": "Fever and upper respiratory symptoms overlap with influenza presentation"
+            },
+            {
+                "condition": "Bacterial sinusitis",
+                "likelihood": 0.2,
+                "rationale": "Persistent congestion and headaches may indicate sinus involvement"
+            }
+        ]
     }
     log.debug("Stub-JSON erzeugt: %s", payload)
     return payload
@@ -120,15 +243,16 @@ def _call_chat(
     temperature: float = 0.2,
     max_retries: int = 2,
     model: Optional[str] = None,
+    language: Optional[str] = None,
 ) -> str:
     """
     Calls OpenAI Chat mit Retries.
-    Dev/Testing liefert Stub; in Dev/Testing gibt es zusätzlich einen Fail-Safe,
-    der bei Fehlern '[stub-fallback:...]' zurückgibt, damit keine 502 im Dev entstehen.
+    Dev/Testing liefert Stub; im Fehlerfall gibt es einen Fail-Safe, der
+    einen sicheren Hinweistext zurückgibt, damit keine 502 im Dev entstehen.
     """
     if _STUB:
         log.info("Stub-Mode aktiv – überspringe echten API-Call")
-        return _stub_text(messages)
+        return _stub_text(messages, language=language)
 
     model = model or DEFAULT_MODEL
     last_exc: Optional[Exception] = None
@@ -173,24 +297,36 @@ def _call_chat(
 
     dur = time.monotonic() - start_ts
     msg = f"OpenAI chat call failed after {max_retries+1} attempts (took {dur:.2f}s): {last_exc}"
-    if _ENV in ("development", "testing", ""):
-        # Fail-safe in Dev/Tests: niemals 502 werfen
-        log.error("%s | gebe stub-fallback zurück", msg)
-        return f"[stub-fallback:{DEFAULT_MODEL}] {_last_user_text(messages)}".strip() or "[stub-fallback:ok]"
+    log.error(msg)
 
-    # In Prod: Exception propagieren
-    log.exception(msg)
+    if _ALLOW_FALLBACK:
+        log.warning("Returning safe fallback after OpenAI failure")
+        return _safe_fallback_text(
+            _last_user_text(messages),
+            reason="temporary service interruption",
+            language=language,
+        )
+
     raise AIServiceError(msg)
 
 # -----------------------------------------------------------------------------
 # Public API
 # -----------------------------------------------------------------------------
-def chat_raw(messages: List[Dict[str, Any]], *, timeout: int = 30) -> str:
+def chat_raw(
+    messages: List[Dict[str, Any]],
+    *,
+    timeout: int = 30,
+    language: Optional[str] = None,
+) -> str:
     """
     Pass-through chat; returns raw text (oder Stub in Dev/Testing).
     'timeout' wird nur im Legacy SDK genutzt, beim neuen SDK ignoriert.
     """
-    return _call_chat(messages, timeout=timeout)
+    lang = normalize_language(language) if language else None
+    result = _call_chat(messages, timeout=timeout, language=lang)
+    if any(result.startswith(prefix) for prefix in FALLBACK_PREFIXES) and not _ALLOW_FALLBACK:
+        raise AIServiceError("Fallback disabled but stub response returned")
+    return result
 
 def chat_json(prompt_text: str, *, timeout: int = 30) -> Dict[str, Any]:
     """
@@ -221,6 +357,9 @@ def chat_json(prompt_text: str, *, timeout: int = 30) -> Dict[str, Any]:
             return json.loads(candidate)
         except Exception as exc:
             log.exception("JSON-Parsing fehlgeschlagen. Rohtext-Länge=%d", len(text) if isinstance(text, str) else -1)
+            if _ALLOW_FALLBACK:
+                log.warning("Returning stub JSON after parsing failure")
+                return _stub_json()
             raise AIJSONError(f"Failed to parse JSON response: {exc}") from exc
 
 # -----------------------------------------------------------------------------
@@ -242,6 +381,7 @@ Tasks:
 1. List the top 5 possible diagnoses, each with a probability (0.00–1.00).
 2. For each diagnosis, give a triage level: low, medium or high.
 3. Provide an overall risk evaluation: risk_level (low/medium/high) and urgency (self-care, see-doctor, emergency).
+4. Suggest up to 3 differential diagnoses (distinct from the main list) with a likelihood score and brief rationale.
 
 Respond in JSON:
 {{
@@ -249,15 +389,34 @@ Respond in JSON:
     {{"condition": "...", "probability": 0.00, "triage": "..."}}
   ],
   "risk_evaluation": {{"risk_level": "...", "urgency": "..."}}
+  "differential_diagnosis": [
+    {{"condition": "...", "likelihood": 0.0, "rationale": "..."}}
+  ]
 }}
 """.strip()
 
-def build_drug_prompt(profile, allergies, conditions, drug_context_list) -> str:
+def build_drug_prompt(
+    profile,
+    allergies,
+    conditions,
+    drug_context_list,
+    *,
+    pregnant: Optional[bool] = None,
+) -> str:
+    age = getattr(profile, "age", None)
+    age_text = age if age not in {None, ""} else "unknown"
+    sex_value = getattr(profile, "sex", None)
+    sex_text = sex_value if sex_value else "unknown"
+    pregnancy_text = (
+        "yes" if pregnant is True else "no" if pregnant is False else "unknown"
+    )
+
     return f"""
 You are a pharmacology expert AI.
 Patient profile:
-- Age: {getattr(profile, 'age', 'unknown')}
-- Sex: {getattr(profile, 'sex', 'unknown')}
+- Age: {age_text}
+- Sex: {sex_text}
+- Pregnant: {pregnancy_text}
 - Allergies: {', '.join(allergies) if allergies else 'none'}
 - Pre-existing conditions: {', '.join(conditions) if conditions else 'none'}
 
@@ -268,6 +427,8 @@ For each medication:
 1. Check if the prescribed dosage exceeds the max_daily_dose. If so, flag an overdose risk.
 2. Identify severe or moderate drug-drug interactions among the list.
 3. Identify any contraindications based on the patient’s conditions and allergies.
+4. Recommend appropriate dosing guidance (typical adult dose, max daily dose) and flag if the reported dose differs meaningfully.
+5. Summarize notable side effects the patient should monitor, especially severe ones, with brief recommendations.
 
 Respond in JSON:
 {{
@@ -279,7 +440,12 @@ Respond in JSON:
   ],
   "contraindications": [
     {{"drug": "...", "condition": "...", "notes": "..."}}
+  ],
+  "dosage_guidance": [
+    {{"drug": "...", "recommended_dose": "...", "note": "..."}}
+  ],
+  "side_effects": [
+    {{"drug": "...", "effect": "...", "severity": "...", "recommendation": "..."}}
   ]
 }}
 """.strip()
-

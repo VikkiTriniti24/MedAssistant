@@ -28,6 +28,7 @@
 <script>
 (function () {
   const $ = (s) => document.querySelector(s);
+  const tr = (key) => (window.I18n ? window.I18n.t(key) : key);
 
   function showMsg(text, type = "warning") {
     const box = $("#loginMsg");
@@ -54,25 +55,25 @@
   (function precheck() {
     const tok = localStorage.getItem("access_token");
     if (tok) {
-      showMsg("Bereits eingeloggt. Weiter zum Dashboard …", "success");
+      showMsg(tr("auth.login.already"), "success");
       setTimeout(() => { window.location.replace("/"); }, 300);
     }
   })();
 
   $("#btnLogout")?.addEventListener("click", () => {
     clearToken();
-    showMsg("Logged out.", "success");
+    showMsg(tr("common.logout_success"), "success");
   });
 
   $("#loginForm")?.addEventListener("submit", async (e) => {
     e.preventDefault();
-    showMsg("Logging in…", "primary");
+    showMsg(tr("auth.login.logging_in"), "primary");
 
     const email = $("#email")?.value?.trim();
     const password = $("#password")?.value ?? "";
 
     if (!email || !password) {
-      showMsg("Bitte E-Mail und Passwort eingeben.", "warning");
+      showMsg(tr("auth.login.missing_fields"), "warning");
       return;
     }
 
@@ -85,23 +86,29 @@
       const data = await resp.json().catch(() => ({}));
 
       if (!resp.ok) {
-        const err = data?.error || data?.msg || "Login fehlgeschlagen.";
-        showMsg(err, "danger");
+        const err = data?.error || data?.msg || tr("auth.login.generic_error");
+        if (resp.status === 401) {
+          showMsg(`${err} · ${tr("auth.login.hint_reset")}`, "danger");
+        } else if (resp.status === 404) {
+          showMsg(`${err} · ${tr("auth.login.hint_register")}`, "danger");
+        } else {
+          showMsg(err, "danger");
+        }
         return;
       }
 
       const token = data?.access_token;
       if (!token) {
-        showMsg("Kein access_token in Antwort.", "danger");
+        showMsg(tr("auth.login.no_token"), "danger");
         return;
       }
 
       saveToken(token);
-      showMsg("Eingeloggt. Weiter zum Dashboard …", "success");
+      showMsg(tr("auth.login.success"), "success");
       setTimeout(() => { window.location.replace("/"); }, 300);
     } catch (err) {
       console.error(err);
-      showMsg("Netzwerkfehler. Bitte erneut versuchen.", "danger");
+      showMsg(tr("auth.login.network_error"), "danger");
     }
   });
 })();
