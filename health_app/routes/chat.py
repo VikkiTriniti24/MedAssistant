@@ -485,7 +485,7 @@ def export_chat_session():
     if not profile:
         return jsonify({"error": "Profile not found"}), HTTPStatus.NOT_FOUND
 
-    language = _profile_language(profile)
+    _language = _profile_language(profile)  # aktuell ungenutzt
 
     session_id = request.args.get("session_id", type=int)
     export_format = (request.args.get("format") or "json").strip().lower()

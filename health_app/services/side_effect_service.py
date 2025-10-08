@@ -1,9 +1,8 @@
 """Side effect warning utilities."""
 from __future__ import annotations
 
-from typing import Dict, Iterable, List, Optional, Set
+from typing import Dict, Iterable, List
 
-from sqlalchemy import func
 
 from .. import db
 from ..models import Drug, SideEffect

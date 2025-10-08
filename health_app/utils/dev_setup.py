@@ -1,6 +1,11 @@
 # health_app/utils/dev_setup.py
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
+
 from flask import current_app
+
+if TYPE_CHECKING:
+    from flask import Flask
+
 from sqlalchemy import inspect
 from werkzeug.security import generate_password_hash
 
@@ -8,7 +13,7 @@ from .. import db
 from ..models import User, Profile
 
 
-def ensure_dev_db(app: Optional["Flask"] = None) -> None:
+def ensure_dev_db(app: Optional[Flask] = None) -> None:
     """
     In development/testing:
       - legt fehlende Tabellen an

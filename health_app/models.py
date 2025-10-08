@@ -1,5 +1,5 @@
 # health_app/models.py
-from datetime import datetime, date
+from datetime import datetime
 from . import db
 
 # Aliases (kurz)

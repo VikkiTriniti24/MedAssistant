@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from collections import Counter
 from threading import Lock
-from typing import Dict, Iterable, Tuple
+from typing import Dict, Tuple
 
 
 class _MetricsRegistry:

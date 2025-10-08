@@ -1,7 +1,7 @@
 """Utilities for matching brand and generic drug names."""
 from __future__ import annotations
 
-from typing import Dict, Iterable, List, Optional
+from typing import Dict, Iterable, Optional
 
 from ..models import Drug
 

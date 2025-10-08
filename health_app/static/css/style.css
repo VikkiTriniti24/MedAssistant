@@ -79,6 +79,13 @@ body{
   body{ background: var(--bg); }
 }
 
+.noscript-warning{
+  padding:12px;
+  background:#ffefef;
+  color:#b30000;
+  text-align:center;
+}
+
 .skip-link{
   position:absolute;
   left:-999px;
@@ -187,6 +194,14 @@ body{
   overflow:hidden;
   margin-inline: auto;
   max-width: 100%;
+}
+
+.card-form{
+  width: min(100%, 520px);
+}
+
+.card-form-compact{
+  width: min(100%, 480px);
 }
 .card + .card{ margin-top: 20px; }
 

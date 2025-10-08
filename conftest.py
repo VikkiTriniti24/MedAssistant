@@ -1,5 +1,4 @@
 # root-level conftest.py to support tests outside the tests/ package
-import os
 import pytest
 from pathlib import Path
 

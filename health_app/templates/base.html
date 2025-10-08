@@ -16,7 +16,7 @@
   <!-- Haupt-Stylesheet (mit Cache-Busting über Version) -->
   <link rel="stylesheet" href="/static/css/style.css?v={{ app_version|default('dev') }}" />
 
-  <script>
+  <script nonce="{{ csp_nonce }}">
     // Respect user system preference on first load
     (function(){
       try{
@@ -33,7 +33,7 @@
 <body>
   <a class="skip-link" href="#main-content">Zum Inhalt springen</a>
   <noscript>
-    <div style="padding:12px;background:#ffefef;color:#b30000;text-align:center">
+    <div class="noscript-warning">
       Diese Anwendung benötigt JavaScript.
     </div>
   </noscript>

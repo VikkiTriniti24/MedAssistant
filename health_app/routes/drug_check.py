@@ -7,14 +7,13 @@ from flask import Blueprint, jsonify, request, current_app
 from flask_jwt_extended import jwt_required, get_jwt_identity, get_jwt
 
 from .. import db
-from ..models import Drug, Substance, DrugInteraction, DrugCheck, DrugCheckItem, InteractionResult, Profile
+from ..models import Drug, DrugInteraction, DrugCheck, DrugCheckItem, InteractionResult, Profile
 from ..utils.rate_limit import enforce_rate_limit
 from ..services.ai_service import chat_json, build_drug_prompt, is_stub_mode
 from ..services.drug_allergy_service import assess_allergy_conflicts
 from ..services.drug_contraindication_service import assess_contraindications
 from ..services.side_effect_service import collect_side_effect_warnings
 from ..services.dosage_guidance_service import build_dosage_guidance
-from ..services.drug_compatibility_service import evaluate_compatibility
 from ..services.drug_compatibility_service import evaluate_compatibility
 
 drug_check_bp = Blueprint("drug_check", __name__)

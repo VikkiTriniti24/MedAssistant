@@ -6,7 +6,7 @@
 
   <div id="loginMsg" class="alert hidden"></div>
 
-  <form id="loginForm" class="card" style="max-width:480px;">
+  <form id="loginForm" class="card card-form card-form-compact">
     <div class="form-row">
       <label for="email">Email</label>
       <input id="email" name="email" type="email" class="input" required placeholder="you@example.com" autocomplete="username" />
@@ -25,7 +25,7 @@
 {% endblock %}
 
 {% block extra_scripts %}
-<script>
+<script nonce="{{ csp_nonce }}">
 (function () {
   const $ = (s) => document.querySelector(s);
   const tr = (key) => (window.I18n ? window.I18n.t(key) : key);

@@ -14,8 +14,8 @@ from typing import Dict, List
 project_root = Path(__file__).parent
 sys.path.insert(0, str(project_root))
 
-from health_app import create_app, db
-from health_app.models import Drug, Substance, DrugInteraction, SideEffect
+from health_app import create_app, db  # noqa: E402
+from health_app.models import Drug, Substance, DrugInteraction, SideEffect  # noqa: E402
 
 def _merge_brand_synonyms(existing: Drug, new_synonyms: List[str]) -> None:
     current = existing.brand_synonyms or ""

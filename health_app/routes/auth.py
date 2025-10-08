@@ -149,7 +149,7 @@ def register():
         return rl_response
     email = _normalize_email(data.get("email"))
     password = data.get("password") or ""
-    mfa_code = str(data.get("mfa_code") or "").strip()
+    _mfa_code = str(data.get("mfa_code") or "").strip()  # optional eingereicht, derzeit ungenutzt
 
     if not email:
         return jsonify({"msg": "email and password required"}), HTTPStatus.BAD_REQUEST
@@ -253,7 +253,7 @@ def login():
                 return jsonify({"msg": "mfa required", "mfa_required": True}), HTTPStatus.UNAUTHORIZED
 
             mfa_valid = False
-            used_backup = None
+            _used_backup = None  # aktuell ungenutzt, aber behalten
 
             if mfa_code:
                 mfa_valid = verify_totp(config.secret, mfa_code)
@@ -272,7 +272,7 @@ def login():
                         candidate.used_at = datetime.utcnow()
                         db.session.add(candidate)
                         mfa_valid = True
-                        used_backup = candidate
+                        _used_backup = candidate  # aktuell ungenutzt, aber behalten
                         break
                 if not mfa_valid:
                     locked_until = _record_failed_login(user)

@@ -6,6 +6,7 @@ import time
 from pathlib import Path
 from datetime import datetime, timedelta, timezone
 import shutil
+import secrets
 from typing import Optional
 
 import click
@@ -127,7 +128,7 @@ def create_app() -> Flask:
     db.init_app(app)
     from flask_jwt_extended import JWTManager
 
-    jwt_manager = JWTManager(app)
+    JWTManager(app)  # init, Variable nicht nötig
     migrate.init_app(app, db)
 
     # ---- Dev DB bootstrap (inside app context!) ----------------------------
@@ -151,6 +152,14 @@ def create_app() -> Flask:
         app.logger.debug("Template loader info unavailable: %s", e)
 
     @app.before_request
+    def _set_csp_nonce():
+        g.csp_nonce = secrets.token_urlsafe(16)
+
+    @app.context_processor
+    def inject_security_nonce():
+        return {'csp_nonce': getattr(g, 'csp_nonce', '')}
+
+    @app.before_request
     def _capture_audit_start():
         if app.config.get("AUDIT_LOG_ENABLED", True):
             g.audit_start = time.perf_counter()
@@ -158,24 +167,37 @@ def create_app() -> Flask:
     @app.after_request
     def apply_security_headers(resp):
         """Attach baseline security headers to every response unless preset."""
+        nonce = getattr(g, 'csp_nonce', None)
+        if not nonce:
+            nonce = secrets.token_urlsafe(16)
+            g.csp_nonce = nonce
+
+        script_src = ["'self'", f"'nonce-{nonce}'"]
+        style_src = ["'self'"]
+
+        csp_value = (
+            "default-src 'self'; "
+            f"script-src {' '.join(script_src)}; "
+            f"style-src {' '.join(style_src)}; "
+            "img-src 'self' data:; "
+            "font-src 'self' data:; "
+            "connect-src 'self'; "
+            "frame-ancestors 'none'; "
+            "form-action 'self'; "
+            "base-uri 'self'; "
+            "object-src 'none'"
+        )
+
         security_headers = {
             "Strict-Transport-Security": "max-age=63072000; includeSubDomains; preload",
             "X-Content-Type-Options": "nosniff",
             "X-Frame-Options": "DENY",
             "Referrer-Policy": "strict-origin-when-cross-origin",
             "Permissions-Policy": "geolocation=(), camera=(), microphone=()",
-            "Content-Security-Policy": (
-                "default-src 'self'; "
-                "script-src 'self' 'unsafe-inline'; "
-                "style-src 'self' 'unsafe-inline'; "
-                "img-src 'self' data:; "
-                "font-src 'self' data:; "
-                "connect-src 'self'; "
-                "frame-ancestors 'none'; "
-                "form-action 'self'; "
-                "base-uri 'self'"
-            ),
+            "Cross-Origin-Opener-Policy": "same-origin",
+            "Cross-Origin-Resource-Policy": "same-origin",
         }
+        resp.headers['Content-Security-Policy'] = csp_value
         for header, value in security_headers.items():
             resp.headers.setdefault(header, value)
         return resp

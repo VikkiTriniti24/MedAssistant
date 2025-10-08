@@ -1,6 +1,5 @@
 from http import HTTPStatus
 
-import pytest
 
 from health_app.metrics import reset_metrics, track_ai_fallback, track_rate_limit_hit
 
