@@ -274,9 +274,10 @@ def _ensure_profile(user_id: str) -> Optional[Profile]:
     profile = _get_user_profile(user_id)
     if profile:
         return profile
-
+    current_app.logger.debug("Profile missing for user_id=%r; attempting to create", user_id)
     user = _get_user_by_identity(user_id)
     if not user:
+        current_app.logger.warning("Profile lookup failed: user not found for identity=%r", user_id)
         return None
 
     profile = Profile(user_id=user.id)
@@ -343,7 +344,7 @@ def get_profile():
     profile = _ensure_profile(user_id)
 
     if not profile:
-        return jsonify({"error": "User not found"}), HTTPStatus.NOT_FOUND
+        return jsonify({"error": "User not found"}), HTTPStatus.UNAUTHORIZED
     
     try:
         # Get user info
@@ -480,7 +481,7 @@ def update_profile():
     profile = _ensure_profile(user_id)
 
     if not profile:
-        return jsonify({"error": "User not found"}), HTTPStatus.NOT_FOUND
+        return jsonify({"error": "User not found"}), HTTPStatus.UNAUTHORIZED
     
     data = request.get_json(silent=True) or {}
     
@@ -524,7 +525,7 @@ def add_allergy():
     profile = _ensure_profile(user_id)
 
     if not profile:
-        return jsonify({"error": "User not found"}), HTTPStatus.NOT_FOUND
+        return jsonify({"error": "User not found"}), HTTPStatus.UNAUTHORIZED
     
     data = request.get_json(silent=True) or {}
     allergy_name = (data.get("name") or "").strip()
@@ -601,7 +602,7 @@ def add_condition():
     profile = _ensure_profile(user_id)
 
     if not profile:
-        return jsonify({"error": "User not found"}), HTTPStatus.NOT_FOUND
+        return jsonify({"error": "User not found"}), HTTPStatus.UNAUTHORIZED
     
     data = request.get_json(silent=True) or {}
     condition_name = (data.get("name") or "").strip()
@@ -678,7 +679,7 @@ def add_medication():
     profile = _ensure_profile(user_id)
 
     if not profile:
-        return jsonify({"error": "User not found"}), HTTPStatus.NOT_FOUND
+        return jsonify({"error": "User not found"}), HTTPStatus.UNAUTHORIZED
     
     data = request.get_json(silent=True) or {}
     
@@ -1258,7 +1259,7 @@ def export_profile():
     user_id = get_jwt_identity()
     profile = _ensure_profile(user_id)
     if not profile:
-        return jsonify({"error": "User not found"}), HTTPStatus.NOT_FOUND
+        return jsonify({"error": "User not found"}), HTTPStatus.UNAUTHORIZED
     try:
         user = profile.user
         anonymize = _is_truthy(request.args.get("anonymize"))
@@ -1380,7 +1381,7 @@ def get_health_history():
     profile = _ensure_profile(user_id)
 
     if not profile:
-        return jsonify({"error": "User not found"}), HTTPStatus.NOT_FOUND
+        return jsonify({"error": "User not found"}), HTTPStatus.UNAUTHORIZED
     
     try:
         # Get pagination parameters
@@ -1453,7 +1454,8 @@ def get_preferences_route():
     user_id = get_jwt_identity()
     user = _get_user_by_identity(user_id)
     if not user:
-        return jsonify({"error": "User not found"}), HTTPStatus.NOT_FOUND
+        current_app.logger.warning("Preferences lookup failed: user not found for identity=%r", user_id)
+        return jsonify({"error": "User not found"}), HTTPStatus.UNAUTHORIZED
 
     prefs = _ensure_preferences(user.id)
     return jsonify({"success": True, "data": _serialize_preferences(prefs)}), HTTPStatus.OK
@@ -1465,7 +1467,8 @@ def update_preferences_route():
     user_id = get_jwt_identity()
     user = _get_user_by_identity(user_id)
     if not user:
-        return jsonify({"error": "User not found"}), HTTPStatus.NOT_FOUND
+        current_app.logger.warning("Preferences update failed: user not found for identity=%r", user_id)
+        return jsonify({"error": "User not found"}), HTTPStatus.UNAUTHORIZED
 
     data = request.get_json(silent=True) or {}
 

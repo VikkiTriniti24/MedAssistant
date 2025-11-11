@@ -152,7 +152,10 @@ def create_app() -> Flask:
         JWT_ACCESS_TOKEN_EXPIRES=int(os.getenv("JWT_ACCESS_TOKEN_EXPIRES", "1800")),
         JWT_REFRESH_TOKEN_EXPIRES=int(os.getenv("JWT_REFRESH_TOKEN_EXPIRES", "604800")),
         JWT_REFRESH_COOKIE_NAME=os.getenv("JWT_REFRESH_COOKIE_NAME", "refresh_token"),
-        JWT_REFRESH_COOKIE_SECURE=os.getenv("JWT_REFRESH_COOKIE_SECURE", "true").lower() == "true",
+        JWT_REFRESH_COOKIE_SECURE=os.getenv(
+            "JWT_REFRESH_COOKIE_SECURE",
+            "false" if os.getenv("FLASK_ENV", os.getenv("ENV", "development")).lower() in {"development", "dev", "testing", "test"} else "true"
+        ).lower() == "true",
         JWT_REFRESH_COOKIE_SAMESITE=os.getenv("JWT_REFRESH_COOKIE_SAMESITE", "Lax"),
         JWT_COOKIE_CSRF_PROTECT=os.getenv("JWT_COOKIE_CSRF_PROTECT", "false").lower() in {"1", "true", "yes"},
 

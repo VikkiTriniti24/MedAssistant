@@ -8,19 +8,111 @@
   const I18n = window.I18n || null;
   const tr = (key, vars) => (I18n ? I18n.t(key, vars) : key);
 
+  function setNodeTextByKey(node, key) {
+    if (!node) return;
+    if (key) {
+      node.dataset.i18nKey = key;
+      node.textContent = tr(key);
+    } else {
+      delete node.dataset.i18nKey;
+    }
+  }
+
+  function applyDatasetTranslations(root=document) {
+    if (!root) return;
+    const nodes = root.querySelectorAll("[data-i18n-key]");
+    nodes.forEach((node) => {
+      const key = node.dataset.i18nKey;
+      if (key) node.textContent = tr(key);
+    });
+  }
+
   const STORAGE_KEY = "access_token";
 
-  const getToken   = () => localStorage.getItem(STORAGE_KEY) || "";
-  const setToken   = (t) => localStorage.setItem(STORAGE_KEY, t || "");
+  let preferencesLoaded = false;
+  let profileSnapshot = null;
+  let profileLoading = null;
+  let profileDenied = false;
+  let authVerifyPromise = null;
+  let refreshPromise = null;
+
+  const profileMenu = $("#profileMenu");
+  const profileToggle = $("#profileToggle");
+  const profileDropdown = $("#profileDropdown");
+  const profileNameEl = $("#profileName");
+  const profileEmailEl = $("#profileEmail");
+  const profileAvatarEl = $("#profileAvatar");
+  const profileLink = $("#profileLink");
+  const profileModal = $("#profileModal");
+  const profileModalClose = $("#profileModalClose");
+  const profileModalCloseFooter = $("#profileModalCloseFooter");
+  const profileModalEmail = $("#profileModalEmail");
+  const profileModalCreated = $("#profileModalCreated");
+  const profileModalStatus = $("#profileModalStatus");
+  const profileModalStats = $("#profileModalStats");
+  const profileModalAgeValue = $("#profileModalAgeValue");
+  const profileModalSexValue = $("#profileModalSexValue");
+  const profileModalForm = $("#profileModalForm");
+  const profileAgeInput = $("#profileAge");
+  const profileSexSelect = $("#profileSex");
+  const profileSaveBtn = $("#profileSaveBtn");
+  const profileSaveStatus = $("#profileSaveStatus");
+  const profileAllergiesList = $("#profileAllergiesList");
+  const profileAllergiesForm = $("#profileAllergiesForm");
+  const profileAllergyInput = $("#profileAllergyInput");
+  const profileAllergiesStatus = $("#profileAllergiesStatus");
+  const profileConditionsList = $("#profileConditionsList");
+  const profileConditionsForm = $("#profileConditionsForm");
+  const profileConditionInput = $("#profileConditionInput");
+  const profileConditionsStatus = $("#profileConditionsStatus");
+  const profileMedicationsList = $("#profileMedicationsList");
+  const profileMedicationsForm = $("#profileMedicationsForm");
+  const profileMedicationName = $("#profileMedicationName");
+  const profileMedicationDose = $("#profileMedicationDose");
+  const profileMedicationStart = $("#profileMedicationStart");
+  const profileMedicationsStatus = $("#profileMedicationsStatus");
+  const profileContactsList = $("#profileContactsList");
+  const profileContactsForm = $("#profileContactsForm");
+  const profileContactName = $("#profileContactName");
+  const profileContactRelationship = $("#profileContactRelationship");
+  const profileContactPhone = $("#profileContactPhone");
+  const profileContactEmail = $("#profileContactEmail");
+  const profileContactPrimary = $("#profileContactPrimary");
+  const profileContactsStatus = $("#profileContactsStatus");
+  const profileFamilyList = $("#profileFamilyList");
+  const profileFamilyForm = $("#profileFamilyForm");
+  const profileFamilyName = $("#profileFamilyName");
+  const profileFamilyRelationship = $("#profileFamilyRelationship");
+  const profileFamilyBirthdate = $("#profileFamilyBirthdate");
+  const profileFamilyStatus = $("#profileFamilyStatus");
+  const profileHistoryList = $("#profileHistoryList");
+  const profileModalBackdrop = profileModal ? profileModal.querySelector(".modal-backdrop") : null;
+  const profileLanguageButtons = $$(".profile-lang");
+
+  const getToken = () => localStorage.getItem(STORAGE_KEY) || "";
+  const setToken = (t) => {
+    localStorage.setItem(STORAGE_KEY, t || "");
+    profileSnapshot = null;
+    profileLoading = null;
+    profileDenied = false;
+    window.dispatchEvent(new CustomEvent("auth:state-changed"));
+  };
   const clearToken = () => {
     localStorage.removeItem(STORAGE_KEY);
     preferencesLoaded = false;
+    profileSnapshot = null;
+    profileLoading = null;
+    profileDenied = false;
+    resetProfileMenuUI();
+    window.dispatchEvent(new CustomEvent("auth:state-changed"));
   };
-
-  let preferencesLoaded = false;
 
   async function loadPreferenceLanguage() {
     if (!I18n || preferencesLoaded) {
+      return;
+    }
+    const token = await ensureAccessToken();
+    if (!token) {
       return;
     }
     const res = await apiFetch("/profile/preferences/");
@@ -29,8 +121,15 @@
       if (lang) {
         I18n.setLanguage(lang);
       }
+      preferencesLoaded = true;
+      return;
     }
-    preferencesLoaded = true;
+    if (res.status === 401) {
+      profileDenied = true;
+      console.warn("[auth] preferences endpoint returned 401");
+      const ok = await verifyCurrentAuth();
+      if (!ok) clearToken();
+    }
   }
 
   // fetch mit JSON & JWT
@@ -49,6 +148,7 @@
       resp = await fetch(url, {
         method,
         headers: finalHeaders,
+        credentials: "same-origin",
         body: json && body && typeof body !== "string" ? JSON.stringify(body) : body
       });
     } catch (err) {
@@ -86,6 +186,919 @@
     return { ok: resp.ok, status: resp.status, data, response: resp };
   }
 
+  function setProfileMenuOpen(open) {
+    if (!profileMenu) return;
+    const value = open ? "true" : "false";
+    profileMenu.dataset.open = value;
+    profileMenu.classList.toggle("open", open);
+    if (profileToggle) profileToggle.setAttribute("aria-expanded", value);
+  }
+
+  function defaultProfileLabel() {
+    return tr("nav.profile");
+  }
+
+  function nameFromEmail(email) {
+    if (!email || typeof email !== "string") return "";
+    const local = email.split("@")[0] || "";
+    if (!local) return "";
+    const parts = local.split(/[._-]+/).filter(Boolean);
+    if (!parts.length) {
+      return local.charAt(0).toUpperCase() + local.slice(1);
+    }
+    return parts
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(" ");
+  }
+
+  function avatarInitial(source) {
+    if (!source) return "👤";
+    const text = String(source).trim();
+    if (!text) return "👤";
+    return text.charAt(0).toUpperCase();
+  }
+
+  function applyProfileMenuUI(profile) {
+    const email = profile?.user?.email || "";
+    const display = nameFromEmail(email) || email || defaultProfileLabel();
+    if (profileNameEl) profileNameEl.textContent = display;
+    if (profileEmailEl) profileEmailEl.textContent = email;
+    if (profileAvatarEl) profileAvatarEl.textContent = avatarInitial(display || email);
+  }
+
+  function resetProfileMenuUI() {
+    setProfileMenuOpen(false);
+    if (profileNameEl) profileNameEl.textContent = defaultProfileLabel();
+    if (profileEmailEl) profileEmailEl.textContent = "";
+    if (profileAvatarEl) profileAvatarEl.textContent = "👤";
+  }
+
+  async function ensureProfileSnapshot() {
+    if (profileDenied) return null;
+    let token = getToken();
+    if (!token) {
+      token = await ensureAccessToken();
+      if (!token) return null;
+    }
+    if (profileSnapshot) {
+      refreshProfileLocale();
+      return profileSnapshot;
+    }
+    if (profileLoading) {
+      return profileLoading;
+    }
+    profileLoading = (async () => {
+      const res = await apiFetch("/profile/");
+      profileLoading = null;
+      if (!res.ok) {
+        if (res.status === 401) {
+          profileDenied = true;
+          console.warn("[auth] profile endpoint returned 401");
+          verifyCurrentAuth().then((ok) => {
+            if (!ok) clearToken();
+          });
+        }
+        return null;
+      }
+      if (!res.data || !res.data.data) {
+        return null;
+      }
+      profileSnapshot = res.data.data;
+      refreshProfileLocale();
+      return profileSnapshot;
+    })();
+    return profileLoading;
+  }
+
+  function isProfileModalOpen() {
+    return profileModal && !profileModal.classList.contains("hidden");
+  }
+
+  function formatDateTime(value) {
+    if (!value) return tr("profile.modal.unknown");
+    const date = typeof value === "string" ? new Date(value) : value;
+    if (Number.isNaN(date.getTime())) {
+      return tr("profile.modal.unknown");
+    }
+    return date.toLocaleString();
+  }
+
+  function closeProfileModal() {
+    if (!profileModal) return;
+    profileModal.classList.add("hidden");
+    document.body.classList.remove("modal-open");
+    const focusTarget = profileToggle || profileMenu || document.body;
+    if (focusTarget && typeof focusTarget.focus === "function") {
+      focusTarget.focus();
+    }
+  }
+
+  const ALLOWED_SEX_VALUES = new Set(["female", "male", "other", "unknown"]);
+
+  function escapeHtml(value) {
+    return String(value ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+
+  function parseId(value) {
+    if (value === null || value === undefined || value === "") return null;
+    const num = Number.parseInt(String(value), 10);
+    return Number.isNaN(num) ? null : num;
+  }
+
+  function translateSexValue(value) {
+    if (!value) return tr("profile.modal.sex_unknown");
+    const normalized = String(value).toLowerCase();
+    const keyMap = {
+      female: "profile.modal.sex_female",
+      male: "profile.modal.sex_male",
+      other: "profile.modal.sex_other",
+      unknown: "profile.modal.sex_unknown_option",
+    };
+    const key = keyMap[normalized];
+    if (key) {
+      const translated = tr(key);
+      return translated && translated !== key ? translated : normalized;
+    }
+    return normalized.charAt(0).toUpperCase() + normalized.slice(1);
+  }
+
+  function buildStat(label, value) {
+    return `
+      <div class="stat">
+        <span class="stat-label">${label}</span>
+        <span>${value}</span>
+      </div>
+    `;
+  }
+
+  function populateProfileModal(profile) {
+    if (!profileModal) return;
+    const user = profile?.user || {};
+    const summary = profile?.summary || {};
+    const profileCore = profile?.profile || {};
+
+    const email = user.email || "";
+    if (profileModalEmail) profileModalEmail.textContent = email || tr("profile.modal.unknown");
+
+    const created = user.created_at ? formatDateTime(user.created_at) : tr("profile.modal.unknown");
+    if (profileModalCreated) profileModalCreated.textContent = created;
+
+    const statusParts = [];
+    if (user.is_active === false) {
+      statusParts.push(tr("profile.modal.inactive"));
+    } else {
+      statusParts.push(tr("profile.modal.active"));
+    }
+    if (user.email_verified) {
+      statusParts.push(tr("profile.modal.email_verified"));
+    } else {
+      statusParts.push(tr("profile.modal.email_unverified"));
+    }
+    if (profileModalStatus) profileModalStatus.textContent = statusParts.join(" · ");
+
+    const ageValue = profileCore?.age;
+    if (profileModalAgeValue) {
+      profileModalAgeValue.textContent =
+        ageValue !== undefined && ageValue !== null ? String(ageValue) : tr("profile.modal.unknown");
+    }
+
+    const sexValue = profileCore?.sex;
+    if (profileModalSexValue) {
+      profileModalSexValue.textContent = translateSexValue(sexValue);
+    }
+
+    const statMap = [
+      ["total_allergies", "profile.modal.stat_allergies"],
+      ["total_conditions", "profile.modal.stat_conditions"],
+      ["active_medications", "profile.modal.stat_medications"],
+      ["total_health_entries", "profile.modal.stat_checks"],
+      ["emergency_contacts", "profile.modal.stat_contacts"],
+      ["family_members", "profile.modal.stat_family"],
+    ];
+
+    const statsHtml = statMap
+      .map(([key, labelKey]) => {
+        const val = summary[key];
+        if (val === undefined || val === null) return "";
+        return buildStat(tr(labelKey), val);
+      })
+      .filter(Boolean)
+      .join("");
+
+    if (profileModalStats) {
+      profileModalStats.innerHTML = statsHtml || `<div class="muted">${tr("profile.modal.no_stats")}</div>`;
+    }
+
+    if (profileAgeInput) {
+      profileAgeInput.value = ageValue !== undefined && ageValue !== null ? String(ageValue) : "";
+    }
+    if (profileSexSelect) {
+      const normalized = sexValue ? String(sexValue).toLowerCase() : "";
+      if (normalized) {
+        const hasOption = Array.from(profileSexSelect.options || []).some((opt) => opt.value === normalized);
+        if (!hasOption) {
+          const option = document.createElement("option");
+          option.value = normalized;
+          option.textContent = translateSexValue(normalized);
+          profileSexSelect.appendChild(option);
+        }
+      }
+      profileSexSelect.value = normalized;
+    }
+
+    renderAllergiesList(profile);
+    renderConditionsList(profile);
+    renderMedicationsList(profile);
+    renderContactsList(profile);
+    renderFamilyList(profile);
+    renderHistoryList(profile);
+  }
+
+  function setProfileSaveMessage(message, tone) {
+    if (!profileSaveStatus) return;
+    profileSaveStatus.textContent = message || "";
+    if (message) {
+      profileSaveStatus.dataset.state = tone || "info";
+    } else {
+      delete profileSaveStatus.dataset.state;
+    }
+  }
+
+  function setSectionStatus(el, message, tone) {
+    if (!el) return;
+    el.textContent = message || "";
+    if (message) {
+      el.dataset.state = tone || "info";
+    } else {
+      delete el.dataset.state;
+    }
+  }
+
+  function handleProfileUnauthorized() {
+    profileDenied = true;
+    verifyCurrentAuth().then((ok) => {
+      if (!ok) clearToken();
+    });
+  }
+
+  function formatDateOnly(value) {
+    if (!value) return "";
+    const date = typeof value === "string" ? new Date(value) : value;
+    if (!(date instanceof Date) || Number.isNaN(date.getTime())) {
+      return "";
+    }
+    return date.toLocaleDateString();
+  }
+
+  function resetCollectionForms() {
+    if (profileAllergiesForm) profileAllergiesForm.reset();
+    if (profileConditionsForm) profileConditionsForm.reset();
+    if (profileMedicationsForm) profileMedicationsForm.reset();
+    if (profileContactsForm) profileContactsForm.reset();
+    if (profileFamilyForm) profileFamilyForm.reset();
+    if (profileContactPrimary) profileContactPrimary.checked = false;
+  }
+
+  function renderAllergiesList(profile) {
+    if (!profileAllergiesList) return;
+    const items = Array.isArray(profile?.allergies) ? profile.allergies : [];
+    if (!items.length) {
+      profileAllergiesList.innerHTML = `<li class="muted" data-empty>${escapeHtml(tr("profile.collections.allergies.empty"))}</li>`;
+      return;
+    }
+    profileAllergiesList.innerHTML = items
+      .map((item) => {
+        const name = item?.name ? escapeHtml(item.name) : escapeHtml(tr("profile.collections.untitled"));
+        const id = item?.id ?? "";
+        return `
+          <li data-id="${id}">
+            <div class="profile-item-info">
+              <strong>${name}</strong>
+            </div>
+            <div class="profile-item-actions">
+              <button type="button" class="btn btn-ghost" data-action="remove-allergy" data-id="${id}">
+                ${escapeHtml(tr("profile.collections.remove_button"))}
+              </button>
+            </div>
+          </li>
+        `;
+      })
+      .join("");
+  }
+
+  function renderConditionsList(profile) {
+    if (!profileConditionsList) return;
+    const items = Array.isArray(profile?.conditions) ? profile.conditions : [];
+    if (!items.length) {
+      profileConditionsList.innerHTML = `<li class="muted" data-empty>${escapeHtml(tr("profile.collections.conditions.empty"))}</li>`;
+      return;
+    }
+    profileConditionsList.innerHTML = items
+      .map((item) => {
+        const name = item?.name ? escapeHtml(item.name) : escapeHtml(tr("profile.collections.untitled"));
+        const id = item?.id ?? "";
+        return `
+          <li data-id="${id}">
+            <div class="profile-item-info">
+              <strong>${name}</strong>
+            </div>
+            <div class="profile-item-actions">
+              <button type="button" class="btn btn-ghost" data-action="remove-condition" data-id="${id}">
+                ${escapeHtml(tr("profile.collections.remove_button"))}
+              </button>
+            </div>
+          </li>
+        `;
+      })
+      .join("");
+  }
+
+  function renderMedicationsList(profile) {
+    if (!profileMedicationsList) return;
+    const items = Array.isArray(profile?.medications) ? profile.medications : [];
+    if (!items.length) {
+      profileMedicationsList.innerHTML = `<li class="muted" data-empty>${escapeHtml(tr("profile.collections.medications.empty"))}</li>`;
+      return;
+    }
+    profileMedicationsList.innerHTML = items
+      .map((item) => {
+        const id = item?.id ?? "";
+        const name = item?.drug_name
+          ? escapeHtml(item.drug_name)
+          : escapeHtml(tr("profile.collections.medications.unknown_drug"));
+        const detailParts = [];
+        if (item?.dosage) detailParts.push(escapeHtml(item.dosage));
+        const started = formatDateOnly(item?.started_at);
+        if (started) {
+          detailParts.push(escapeHtml(tr("profile.collections.medications.started", { date: started })));
+        }
+        const ended = formatDateOnly(item?.ended_at);
+        if (ended) {
+          detailParts.push(escapeHtml(tr("profile.collections.medications.ended", { date: ended })));
+        }
+        const detailHtml = detailParts.length ? `<span class="muted">${detailParts.join(" · ")}</span>` : "";
+        const badgeKey = item?.is_active ? "profile.collections.medications.active_badge" : "profile.collections.medications.inactive_badge";
+        const badgeClass = item?.is_active ? "badge success" : "badge";
+        const badge = `<span class="${badgeClass}">${escapeHtml(tr(badgeKey))}</span>`;
+        return `
+          <li data-id="${id}">
+            <div class="profile-item-info">
+              <strong>${name}</strong>
+              ${detailHtml}
+            </div>
+            <div class="profile-item-actions">
+              ${badge}
+              <button type="button" class="btn btn-ghost" data-action="remove-medication" data-id="${id}">
+                ${escapeHtml(tr("profile.collections.remove_button"))}
+              </button>
+            </div>
+          </li>
+        `;
+      })
+      .join("");
+  }
+
+  function renderContactsList(profile) {
+    if (!profileContactsList) return;
+    const items = Array.isArray(profile?.emergency_contacts) ? profile.emergency_contacts : [];
+    if (!items.length) {
+      profileContactsList.innerHTML = `<li class="muted" data-empty>${escapeHtml(tr("profile.collections.contacts.empty"))}</li>`;
+      return;
+    }
+    profileContactsList.innerHTML = items
+      .map((contact) => {
+        const id = contact?.id ?? "";
+        const name = contact?.name ? escapeHtml(contact.name) : escapeHtml(tr("profile.collections.untitled"));
+        const relation = contact?.relationship ? `<span class="muted">${escapeHtml(contact.relationship)}</span>` : "";
+        const contactParts = [];
+        if (contact?.phone) contactParts.push(escapeHtml(contact.phone));
+        if (contact?.email) contactParts.push(escapeHtml(contact.email));
+        const contactInfo = contactParts.length ? `<span class="muted">${contactParts.join(" · ")}</span>` : "";
+        const primaryBadge = contact?.is_primary
+          ? `<span class="badge success">${escapeHtml(tr("profile.collections.contacts.primary_badge"))}</span>`
+          : "";
+        return `
+          <li data-id="${id}">
+            <div class="profile-item-info">
+              <strong>${name}</strong>
+              ${relation}
+              ${contactInfo}
+            </div>
+            <div class="profile-item-actions">
+              ${primaryBadge}
+              <button type="button" class="btn btn-ghost" data-action="remove-contact" data-id="${id}">
+                ${escapeHtml(tr("profile.collections.remove_button"))}
+              </button>
+            </div>
+          </li>
+        `;
+      })
+      .join("");
+  }
+
+  function renderFamilyList(profile) {
+    if (!profileFamilyList) return;
+    const items = Array.isArray(profile?.family_members) ? profile.family_members : [];
+    if (!items.length) {
+      profileFamilyList.innerHTML = `<li class="muted" data-empty>${escapeHtml(tr("profile.collections.family.empty"))}</li>`;
+      return;
+    }
+    profileFamilyList.innerHTML = items
+      .map((member) => {
+        const id = member?.id ?? "";
+        const name = member?.name ? escapeHtml(member.name) : escapeHtml(tr("profile.collections.untitled"));
+        const relation = member?.relationship ? `<span class="muted">${escapeHtml(member.relationship)}</span>` : "";
+        const birth = formatDateOnly(member?.birthdate);
+        const birthHtml = birth ? `<span class="muted">${escapeHtml(birth)}</span>` : "";
+        return `
+          <li data-id="${id}">
+            <div class="profile-item-info">
+              <strong>${name}</strong>
+              ${relation}
+              ${birthHtml}
+            </div>
+            <div class="profile-item-actions">
+              <button type="button" class="btn btn-ghost" data-action="remove-family" data-id="${id}">
+                ${escapeHtml(tr("profile.collections.remove_button"))}
+              </button>
+            </div>
+          </li>
+        `;
+      })
+      .join("");
+  }
+
+  function renderHistoryList(profile) {
+    if (!profileHistoryList) return;
+    const items = Array.isArray(profile?.health_history) ? profile.health_history : [];
+    if (!items.length) {
+      profileHistoryList.innerHTML = `<li class="muted" data-empty>${escapeHtml(tr("profile.collections.history.empty"))}</li>`;
+      return;
+    }
+    profileHistoryList.innerHTML = items
+      .map((entry) => {
+        const dateText = escapeHtml(formatDateTime(entry?.entered_at) || "");
+        const symptoms = entry?.symptoms ? escapeHtml(entry.symptoms) : escapeHtml(tr("profile.collections.untitled"));
+        const riskLevel = entry?.risk_evaluation?.risk_level;
+        const riskText = riskLevel ? escapeHtml(tr("profile.collections.history.risk", { level: riskLevel })) : "";
+        const riskBadge = riskText ? `<span class="badge">${riskText}</span>` : "";
+        return `
+          <li data-id="${entry?.id ?? ""}">
+            <div class="profile-item-info">
+              <strong>${dateText}</strong>
+              <span class="muted">${symptoms}</span>
+            </div>
+            <div class="profile-item-actions">
+              ${riskBadge}
+            </div>
+          </li>
+        `;
+      })
+      .join("");
+  }
+
+  async function reloadProfileSnapshot() {
+    profileSnapshot = null;
+    profileLoading = null;
+    const refreshed = await ensureProfileSnapshot();
+    if (refreshed) {
+      resetCollectionForms();
+    }
+    return refreshed;
+  }
+
+  async function openProfileModal() {
+    if (!profileModal) return;
+    profileModal.classList.remove("hidden");
+    document.body.classList.add("modal-open");
+    const focusEl = profileModalClose || profileModal.querySelector(".modal-content");
+    if (focusEl && typeof focusEl.focus === "function") {
+      focusEl.focus();
+    }
+    if (profileSaveBtn) profileSaveBtn.disabled = false;
+    setProfileSaveMessage("");
+    const profile = await ensureProfileSnapshot();
+    if (!profile) {
+      if (profileModalStats) profileModalStats.innerHTML = `<div class="muted">${tr("profile.modal.fetch_error")}</div>`;
+      if (profileModalEmail) profileModalEmail.textContent = tr("profile.modal.unknown");
+      if (profileModalCreated) profileModalCreated.textContent = tr("profile.modal.unknown");
+      if (profileModalStatus) profileModalStatus.textContent = tr("profile.modal.unknown");
+      return;
+    }
+    populateProfileModal(profile);
+    resetCollectionForms();
+  }
+
+  function currentLanguage() {
+    if (I18n && typeof I18n.getLanguage === "function") {
+      return I18n.getLanguage();
+    }
+    return "en";
+  }
+
+  function applyLanguageButtons() {
+    if (!profileLanguageButtons.length) return;
+    const activeLang = currentLanguage();
+    profileLanguageButtons.forEach((btn) => {
+      if (!btn) return;
+      const lang = (btn.dataset.lang || "").toLowerCase();
+      if (!lang) return;
+      const code = tr(`languages.short.${lang}`);
+      const label = tr(`languages.full.${lang}`);
+      btn.textContent = code !== `languages.short.${lang}` ? code : lang.toUpperCase();
+      btn.setAttribute("aria-label", label !== `languages.full.${lang}` ? label : lang);
+      btn.setAttribute("title", label !== `languages.full.${lang}` ? label : lang.toUpperCase());
+      btn.classList.toggle("active", lang === activeLang);
+    });
+  }
+
+  async function handleLanguageSelect(lang) {
+    if (!lang || !I18n || typeof I18n.setLanguage !== "function") return;
+    const normalized = String(lang).toLowerCase();
+    const previous = currentLanguage();
+    if (normalized === previous) {
+      applyLanguageButtons();
+      return;
+    }
+    I18n.setLanguage(normalized);
+    applyLanguageButtons();
+    applyDatasetTranslations();
+    refreshProfileLocale();
+    const token = getToken();
+    if (token) {
+      const res = await apiFetch("/profile/preferences/", {
+        method: "PUT",
+        body: { language: normalized },
+      });
+      if (!res.ok) {
+        if (res.status === 401) {
+          profileDenied = true;
+          console.warn("[auth] updating preferences denied (401)");
+          verifyCurrentAuth().then((ok) => {
+            if (!ok) clearToken();
+          });
+        }
+        console.warn("[profile] failed to persist language preference", res);
+        return;
+      }
+    }
+    updateNavForAuth();
+  }
+
+  async function handleProfileSave(event) {
+    event.preventDefault();
+
+    let snapshot = profileSnapshot;
+    if (!snapshot) {
+      snapshot = await ensureProfileSnapshot();
+      if (!snapshot) {
+        const failMsg = tr("profile.modal.save_error");
+        setProfileSaveMessage(failMsg, "error");
+        toast(failMsg, "error", tr("profile.modal.save_error_title"));
+        return;
+      }
+    }
+
+    const profileCore = snapshot?.profile || {};
+    const currentAge = profileCore?.age ?? null;
+    const currentSex = (profileCore?.sex || "").toLowerCase();
+
+    const ageRaw = profileAgeInput ? String(profileAgeInput.value || "").trim() : "";
+    const sexRaw = profileSexSelect ? String(profileSexSelect.value || "").trim() : "";
+
+    const updates = {};
+
+    if (ageRaw !== "") {
+      const ageNum = Number.parseInt(ageRaw, 10);
+      if (!Number.isFinite(ageNum) || Number.isNaN(ageNum) || ageNum < 0 || ageNum > 120) {
+        const msg = tr("profile.modal.form_age_invalid");
+        setProfileSaveMessage(msg, "error");
+        toast(msg, "error", tr("profile.modal.save_error_title"));
+        return;
+      }
+      if (currentAge !== ageNum) {
+        updates.age = ageNum;
+      }
+    }
+
+    const normalizedSex = sexRaw ? sexRaw.toLowerCase() : "";
+    if (normalizedSex) {
+      if (!ALLOWED_SEX_VALUES.has(normalizedSex)) {
+        const msg = tr("profile.modal.form_sex_invalid");
+        setProfileSaveMessage(msg, "error");
+        toast(msg, "error", tr("profile.modal.save_error_title"));
+        return;
+      }
+      if (normalizedSex !== currentSex) {
+        updates.sex = normalizedSex;
+      }
+    } else if (currentSex && currentSex !== "unknown") {
+      updates.sex = "unknown";
+    }
+
+    if (!Object.keys(updates).length) {
+      setProfileSaveMessage(tr("profile.modal.form_no_changes"), "info");
+      return;
+    }
+
+    setProfileSaveMessage(tr("profile.modal.save_saving"), "info");
+    if (profileSaveBtn) profileSaveBtn.disabled = true;
+
+    const res = await apiFetch("/profile/", { method: "PUT", body: updates });
+
+    if (profileSaveBtn) profileSaveBtn.disabled = false;
+
+    if (!res.ok) {
+      if (res.status === 401) {
+        profileDenied = true;
+        verifyCurrentAuth().then((ok) => {
+          if (!ok) clearToken();
+        });
+      }
+      const detail = res?.data?.error || res?.data?.msg || tr("profile.modal.save_error");
+      setProfileSaveMessage(detail, "error");
+      toast(detail, "error", tr("profile.modal.save_error_title"));
+      return;
+    }
+
+    setProfileSaveMessage(tr("profile.modal.save_success"), "success");
+    toast(tr("profile.modal.save_success"), "success");
+    await reloadProfileSnapshot();
+  }
+
+  async function handleAddAllergy(event) {
+    event.preventDefault();
+    if (!profileAllergyInput) return;
+    const name = profileAllergyInput.value.trim();
+    if (!name) {
+      setSectionStatus(profileAllergiesStatus, tr("profile.collections.validation_required"), "error");
+      return;
+    }
+    setSectionStatus(profileAllergiesStatus, tr("profile.collections.status_saving"), "info");
+    const res = await apiFetch("/profile/allergies/", { method: "POST", body: { name } });
+    if (!res.ok) {
+      if (res.status === 401) handleProfileUnauthorized();
+      const detail = res?.data?.error || res?.data?.msg || tr("profile.collections.allergies.add_error");
+      setSectionStatus(profileAllergiesStatus, detail, "error");
+      toast(detail, "error", tr("profile.collections.allergies.title"));
+      return;
+    }
+    setSectionStatus(profileAllergiesStatus, tr("profile.collections.allergies.add_success"), "success");
+    toast(tr("profile.collections.allergies.add_success"), "success");
+    await reloadProfileSnapshot();
+  }
+
+  async function handleAllergiesListClick(event) {
+    const button = event.target.closest("[data-action='remove-allergy']");
+    if (!button) return;
+    event.preventDefault();
+    const id = parseId(button.dataset.id || button.closest("li")?.dataset.id);
+    if (id === null) return;
+    await removeAllergy(id);
+  }
+
+  async function removeAllergy(id) {
+    setSectionStatus(profileAllergiesStatus, tr("profile.collections.status_removing"), "info");
+    const res = await apiFetch(`/profile/allergies/${id}/`, { method: "DELETE" });
+    if (!res.ok) {
+      if (res.status === 401) handleProfileUnauthorized();
+      const detail = res?.data?.error || res?.data?.msg || tr("profile.collections.allergies.delete_error");
+      setSectionStatus(profileAllergiesStatus, detail, "error");
+      toast(detail, "error", tr("profile.collections.allergies.title"));
+      return;
+    }
+    setSectionStatus(profileAllergiesStatus, tr("profile.collections.allergies.delete_success"), "success");
+    toast(tr("profile.collections.allergies.delete_success"), "success");
+    await reloadProfileSnapshot();
+  }
+
+  async function handleAddCondition(event) {
+    event.preventDefault();
+    if (!profileConditionInput) return;
+    const name = profileConditionInput.value.trim();
+    if (!name) {
+      setSectionStatus(profileConditionsStatus, tr("profile.collections.validation_required"), "error");
+      return;
+    }
+    setSectionStatus(profileConditionsStatus, tr("profile.collections.status_saving"), "info");
+    const res = await apiFetch("/profile/conditions/", { method: "POST", body: { name } });
+    if (!res.ok) {
+      if (res.status === 401) handleProfileUnauthorized();
+      const detail = res?.data?.error || res?.data?.msg || tr("profile.collections.conditions.add_error");
+      setSectionStatus(profileConditionsStatus, detail, "error");
+      toast(detail, "error", tr("profile.collections.conditions.title"));
+      return;
+    }
+    setSectionStatus(profileConditionsStatus, tr("profile.collections.conditions.add_success"), "success");
+    toast(tr("profile.collections.conditions.add_success"), "success");
+    await reloadProfileSnapshot();
+  }
+
+  async function handleConditionsListClick(event) {
+    const button = event.target.closest("[data-action='remove-condition']");
+    if (!button) return;
+    event.preventDefault();
+    const id = parseId(button.dataset.id || button.closest("li")?.dataset.id);
+    if (id === null) return;
+    await removeCondition(id);
+  }
+
+  async function removeCondition(id) {
+    setSectionStatus(profileConditionsStatus, tr("profile.collections.status_removing"), "info");
+    const res = await apiFetch(`/profile/conditions/${id}/`, { method: "DELETE" });
+    if (!res.ok) {
+      if (res.status === 401) handleProfileUnauthorized();
+      const detail = res?.data?.error || res?.data?.msg || tr("profile.collections.conditions.delete_error");
+      setSectionStatus(profileConditionsStatus, detail, "error");
+      toast(detail, "error", tr("profile.collections.conditions.title"));
+      return;
+    }
+    setSectionStatus(profileConditionsStatus, tr("profile.collections.conditions.delete_success"), "success");
+    toast(tr("profile.collections.conditions.delete_success"), "success");
+    await reloadProfileSnapshot();
+  }
+
+  async function handleAddMedication(event) {
+    event.preventDefault();
+    if (!profileMedicationName || !profileMedicationDose) return;
+    const name = profileMedicationName.value.trim();
+    const dosage = profileMedicationDose.value.trim();
+    const started_at = profileMedicationStart ? profileMedicationStart.value.trim() : "";
+    if (!name || !dosage) {
+      setSectionStatus(profileMedicationsStatus, tr("profile.collections.validation_required"), "error");
+      return;
+    }
+    const payload = { drug_name: name, dosage };
+    if (started_at) payload.started_at = started_at;
+    setSectionStatus(profileMedicationsStatus, tr("profile.collections.status_saving"), "info");
+    const res = await apiFetch("/profile/medications/", { method: "POST", body: payload });
+    if (!res.ok) {
+      if (res.status === 401) handleProfileUnauthorized();
+      const detail = res?.data?.error || res?.data?.msg || tr("profile.collections.medications.add_error");
+      setSectionStatus(profileMedicationsStatus, detail, "error");
+      toast(detail, "error", tr("profile.collections.medications.title"));
+      return;
+    }
+    setSectionStatus(profileMedicationsStatus, tr("profile.collections.medications.add_success"), "success");
+    toast(tr("profile.collections.medications.add_success"), "success");
+    await reloadProfileSnapshot();
+  }
+
+  async function handleMedicationsListClick(event) {
+    const button = event.target.closest("[data-action='remove-medication']");
+    if (!button) return;
+    event.preventDefault();
+    const id = parseId(button.dataset.id || button.closest("li")?.dataset.id);
+    if (id === null) return;
+    await removeMedication(id);
+  }
+
+  async function removeMedication(id) {
+    setSectionStatus(profileMedicationsStatus, tr("profile.collections.status_removing"), "info");
+    const res = await apiFetch(`/profile/medications/${id}/`, { method: "DELETE" });
+    if (!res.ok) {
+      if (res.status === 401) handleProfileUnauthorized();
+      const detail = res?.data?.error || res?.data?.msg || tr("profile.collections.medications.delete_error");
+      setSectionStatus(profileMedicationsStatus, detail, "error");
+      toast(detail, "error", tr("profile.collections.medications.title"));
+      return;
+    }
+    setSectionStatus(profileMedicationsStatus, tr("profile.collections.medications.delete_success"), "success");
+    toast(tr("profile.collections.medications.delete_success"), "success");
+    await reloadProfileSnapshot();
+  }
+
+  async function handleAddContact(event) {
+    event.preventDefault();
+    if (!profileContactName) return;
+    const name = profileContactName.value.trim();
+    const relationship = profileContactRelationship ? profileContactRelationship.value.trim() : "";
+    const phone = profileContactPhone ? profileContactPhone.value.trim() : "";
+    const email = profileContactEmail ? profileContactEmail.value.trim() : "";
+    const is_primary = profileContactPrimary ? Boolean(profileContactPrimary.checked) : false;
+    if (!name) {
+      setSectionStatus(profileContactsStatus, tr("profile.collections.validation_required"), "error");
+      return;
+    }
+    if (!phone && !email) {
+      setSectionStatus(profileContactsStatus, tr("profile.collections.contacts.validation_contact"), "error");
+      return;
+    }
+    const payload = { name };
+    if (relationship) payload.relationship = relationship;
+    if (phone) payload.phone = phone;
+    if (email) payload.email = email;
+    if (is_primary) payload.is_primary = true;
+    setSectionStatus(profileContactsStatus, tr("profile.collections.status_saving"), "info");
+    const res = await apiFetch("/profile/emergency-contacts/", { method: "POST", body: payload });
+    if (!res.ok) {
+      if (res.status === 401) handleProfileUnauthorized();
+      const detail = res?.data?.error || res?.data?.msg || tr("profile.collections.contacts.add_error");
+      setSectionStatus(profileContactsStatus, detail, "error");
+      toast(detail, "error", tr("profile.collections.contacts.title"));
+      return;
+    }
+    setSectionStatus(profileContactsStatus, tr("profile.collections.contacts.add_success"), "success");
+    toast(tr("profile.collections.contacts.add_success"), "success");
+    await reloadProfileSnapshot();
+  }
+
+  async function handleContactsListClick(event) {
+    const button = event.target.closest("[data-action='remove-contact']");
+    if (!button) return;
+    event.preventDefault();
+    const id = parseId(button.dataset.id || button.closest("li")?.dataset.id);
+    if (id === null) return;
+    await removeContact(id);
+  }
+
+  async function removeContact(id) {
+    setSectionStatus(profileContactsStatus, tr("profile.collections.status_removing"), "info");
+    const res = await apiFetch(`/profile/emergency-contacts/${id}/`, { method: "DELETE" });
+    if (!res.ok) {
+      if (res.status === 401) handleProfileUnauthorized();
+      const detail = res?.data?.error || res?.data?.msg || tr("profile.collections.contacts.delete_error");
+      setSectionStatus(profileContactsStatus, detail, "error");
+      toast(detail, "error", tr("profile.collections.contacts.title"));
+      return;
+    }
+    setSectionStatus(profileContactsStatus, tr("profile.collections.contacts.delete_success"), "success");
+    toast(tr("profile.collections.contacts.delete_success"), "success");
+    await reloadProfileSnapshot();
+  }
+
+  async function handleAddFamilyMember(event) {
+    event.preventDefault();
+    if (!profileFamilyName || !profileFamilyRelationship) return;
+    const name = profileFamilyName.value.trim();
+    const relationship = profileFamilyRelationship.value.trim();
+    const birthdate = profileFamilyBirthdate ? profileFamilyBirthdate.value.trim() : "";
+    if (!name || !relationship) {
+      setSectionStatus(profileFamilyStatus, tr("profile.collections.validation_required"), "error");
+      return;
+    }
+    const payload = { name, relationship };
+    if (birthdate) payload.birthdate = birthdate;
+    setSectionStatus(profileFamilyStatus, tr("profile.collections.status_saving"), "info");
+    const res = await apiFetch("/profile/family-members/", { method: "POST", body: payload });
+    if (!res.ok) {
+      if (res.status === 401) handleProfileUnauthorized();
+      const detail = res?.data?.error || res?.data?.msg || tr("profile.collections.family.add_error");
+      setSectionStatus(profileFamilyStatus, detail, "error");
+      toast(detail, "error", tr("profile.collections.family.title"));
+      return;
+    }
+    setSectionStatus(profileFamilyStatus, tr("profile.collections.family.add_success"), "success");
+    toast(tr("profile.collections.family.add_success"), "success");
+    await reloadProfileSnapshot();
+  }
+
+  async function handleFamilyListClick(event) {
+    const button = event.target.closest("[data-action='remove-family']");
+    if (!button) return;
+    event.preventDefault();
+    const id = parseId(button.dataset.id || button.closest("li")?.dataset.id);
+    if (id === null) return;
+    await removeFamilyMember(id);
+  }
+
+  async function removeFamilyMember(id) {
+    setSectionStatus(profileFamilyStatus, tr("profile.collections.status_removing"), "info");
+    const res = await apiFetch(`/profile/family-members/${id}/`, { method: "DELETE" });
+    if (!res.ok) {
+      if (res.status === 401) handleProfileUnauthorized();
+      const detail = res?.data?.error || res?.data?.msg || tr("profile.collections.family.delete_error");
+      setSectionStatus(profileFamilyStatus, detail, "error");
+      toast(detail, "error", tr("profile.collections.family.title"));
+      return;
+    }
+    setSectionStatus(profileFamilyStatus, tr("profile.collections.family.delete_success"), "success");
+    toast(tr("profile.collections.family.delete_success"), "success");
+    await reloadProfileSnapshot();
+  }
+
+  function refreshProfileLocale() {
+    applyLanguageButtons();
+    if (profileSnapshot) {
+      applyProfileMenuUI(profileSnapshot);
+      populateProfileModal(profileSnapshot);
+    } else {
+      if (profileNameEl) profileNameEl.textContent = defaultProfileLabel();
+      if (profileEmailEl) profileEmailEl.textContent = "";
+      if (profileModal && !profileModal.classList.contains("hidden")) {
+        if (profileModalEmail) profileModalEmail.textContent = tr("profile.modal.unknown");
+        if (profileModalCreated) profileModalCreated.textContent = tr("profile.modal.unknown");
+        if (profileModalStatus) profileModalStatus.textContent = tr("profile.modal.unknown");
+        if (profileModalStats) profileModalStats.innerHTML = `<div class="muted">${tr("profile.modal.fetch_error")}</div>`;
+      }
+    }
+  }
+
   function setBadge(text, cls="badge") {
     const b = $("#authBadge");
     if (!b) return;
@@ -94,9 +1107,23 @@
     if (I18n) I18n.apply();
   }
 
-  function updateNavForAuth() {
-    const token = getToken();
+  async function updateNavForAuth() {
+    let token = getToken();
+    if (!token) {
+      token = await ensureAccessToken();
+    }
     const has = !!token;
+
+    if (!has) {
+      profileSnapshot = null;
+      profileLoading = null;
+      profileDenied = false;
+      preferencesLoaded = false;
+    } else {
+      profileDenied = false;
+    }
+
+    applyLanguageButtons();
 
     // Badge + Buttons
     setBadge(
@@ -110,6 +1137,20 @@
     if (navLogin)    navLogin.classList.toggle("hidden",  has);
     if (navRegister) navRegister.classList.toggle("hidden", has);
     if (navLogout)   navLogout.classList.toggle("hidden", !has);
+    if (profileMenu) profileMenu.classList.toggle("hidden", !has);
+
+    if (profileMenu) {
+      if (!has) {
+        resetProfileMenuUI();
+      } else if (profileSnapshot) {
+        refreshProfileLocale();
+      } else {
+        resetProfileMenuUI();
+        ensureProfileSnapshot();
+      }
+    } else if (!has) {
+      resetProfileMenuUI();
+    }
 
     // Hinweise aus-/einblenden
     showHintIfExists(!has);
@@ -130,8 +1171,14 @@
     // Support both template IDs: chat_hint/chatHint and di_hint/drugHint
     const chatHint = document.getElementById("chat_hint") || document.getElementById("chatHint");
     const diHint   = document.getElementById("di_hint")   || document.getElementById("drugHint");
-    if (chatHint) chatHint.style.display = needLogin ? "" : "none";
-    if (diHint)   diHint.style.display   = needLogin ? "" : "none";
+    if (chatHint) {
+      chatHint.style.display = needLogin ? "" : "none";
+      if (needLogin) setNodeTextByKey(chatHint, "chat.hint");
+    }
+    if (diHint) {
+      diHint.style.display = needLogin ? "" : "none";
+      if (needLogin) setNodeTextByKey(diHint, "drug.hint");
+    }
   }
 
   function toast(msg, type="info", title) {
@@ -175,12 +1222,157 @@
     btn.textContent = (get() === "dark" ? "🌙" : "🌓");
   })();
 
+  (function initProfileMenu(){
+    if (!profileMenu || !profileToggle) {
+      if (typeof window !== "undefined") {
+        window.__applyProfileLocale = () => {
+          resetProfileMenuUI();
+          applyLanguageButtons();
+        };
+      }
+      return;
+    }
+
+    const handleOutsideClick = (event) => {
+      if (!profileMenu || profileMenu.classList.contains("hidden")) return;
+      if (profileMenu.contains(event.target)) return;
+      setProfileMenuOpen(false);
+    };
+
+    const handleEscape = (event) => {
+      if (event.key !== "Escape") return;
+      if (isProfileModalOpen()) {
+        closeProfileModal();
+        return;
+      }
+      if (!profileMenu || profileMenu.dataset.open !== "true") return;
+      setProfileMenuOpen(false);
+      if (profileToggle) profileToggle.focus();
+    };
+
+    on(profileToggle, "click", (event) => {
+      event.preventDefault();
+      if (profileMenu.classList.contains("hidden")) return;
+      const open = profileMenu.dataset.open === "true";
+      setProfileMenuOpen(!open);
+    });
+
+    if (profileLink) {
+      on(profileLink, "click", (event) => {
+        event.preventDefault();
+        if (profileMenu.classList.contains("hidden")) return;
+        setProfileMenuOpen(false);
+        openProfileModal();
+      });
+    }
+    if (profileDropdown) {
+      on(profileDropdown, "click", (event) => {
+        // Prevent buttons inside the dropdown from closing it prematurely via bubbling to document.
+        event.stopPropagation();
+      });
+    }
+
+    document.addEventListener("click", handleOutsideClick);
+    document.addEventListener("keydown", handleEscape);
+
+    if (typeof window !== "undefined") {
+      window.__applyProfileLocale = refreshProfileLocale;
+      window.__applyProfileLocale();
+    }
+  })();
+
+  (function initLanguageSwitcher(){
+    if (!profileLanguageButtons.length) return;
+    profileLanguageButtons.forEach((btn) => {
+      on(btn, "click", (event) => {
+        event.preventDefault();
+        const lang = btn.dataset.lang;
+        if (!lang) return;
+        handleLanguageSelect(lang);
+      });
+    });
+    applyLanguageButtons();
+  })();
+
+  (function initProfileModal(){
+    if (!profileModal) return;
+
+    if (typeof window !== "undefined") {
+      window.__applyProfileModalLocale = refreshProfileLocale;
+    }
+
+    const closeNodes = [profileModalClose, profileModalCloseFooter, profileModalBackdrop];
+    closeNodes.forEach((node) => {
+      if (!node) return;
+      on(node, "click", (event) => {
+        event.preventDefault();
+        closeProfileModal();
+      });
+    });
+
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && isProfileModalOpen()) {
+        closeProfileModal();
+      }
+    });
+
+    if (profileModalForm) {
+      on(profileModalForm, "submit", handleProfileSave);
+    }
+    if (profileAgeInput) {
+      on(profileAgeInput, "input", () => setProfileSaveMessage(""));
+    }
+    if (profileSexSelect) {
+      on(profileSexSelect, "change", () => setProfileSaveMessage(""));
+    }
+
+    if (profileAllergiesForm) on(profileAllergiesForm, "submit", handleAddAllergy);
+    if (profileAllergiesList) on(profileAllergiesList, "click", handleAllergiesListClick);
+    if (profileConditionsForm) on(profileConditionsForm, "submit", handleAddCondition);
+    if (profileConditionsList) on(profileConditionsList, "click", handleConditionsListClick);
+    if (profileMedicationsForm) on(profileMedicationsForm, "submit", handleAddMedication);
+    if (profileMedicationsList) on(profileMedicationsList, "click", handleMedicationsListClick);
+    if (profileContactsForm) on(profileContactsForm, "submit", handleAddContact);
+    if (profileContactsList) on(profileContactsList, "click", handleContactsListClick);
+    if (profileFamilyForm) on(profileFamilyForm, "submit", handleAddFamilyMember);
+    if (profileFamilyList) on(profileFamilyList, "click", handleFamilyListClick);
+
+    if (profileAllergyInput) on(profileAllergyInput, "input", () => setSectionStatus(profileAllergiesStatus, ""));
+    if (profileConditionInput) on(profileConditionInput, "input", () => setSectionStatus(profileConditionsStatus, ""));
+    if (profileMedicationName) on(profileMedicationName, "input", () => setSectionStatus(profileMedicationsStatus, ""));
+    if (profileMedicationDose) on(profileMedicationDose, "input", () => setSectionStatus(profileMedicationsStatus, ""));
+    if (profileMedicationStart) on(profileMedicationStart, "input", () => setSectionStatus(profileMedicationsStatus, ""));
+    if (profileContactName) on(profileContactName, "input", () => setSectionStatus(profileContactsStatus, ""));
+    if (profileContactRelationship) on(profileContactRelationship, "input", () => setSectionStatus(profileContactsStatus, ""));
+    if (profileContactPhone) on(profileContactPhone, "input", () => setSectionStatus(profileContactsStatus, ""));
+    if (profileContactEmail) on(profileContactEmail, "input", () => setSectionStatus(profileContactsStatus, ""));
+    if (profileFamilyName) on(profileFamilyName, "input", () => setSectionStatus(profileFamilyStatus, ""));
+    if (profileFamilyRelationship) on(profileFamilyRelationship, "input", () => setSectionStatus(profileFamilyStatus, ""));
+    if (profileFamilyBirthdate) on(profileFamilyBirthdate, "input", () => setSectionStatus(profileFamilyStatus, ""));
+  })();
+
   // ------- Logout Button -------
-  on($("#navLogout"), "click", (e) => {
+  on($("#navLogout"), "click", async (e) => {
     e.preventDefault();
+    let serverOk = false;
+    try {
+      const resp = await fetch("/auth/logout", {
+        method: "POST",
+        credentials: "same-origin"
+      });
+      if (resp.ok || resp.status === 401) {
+        serverOk = true;
+      } else {
+        console.warn("[auth] logout returned status", resp.status);
+      }
+    } catch (err) {
+      console.warn("[auth] logout request failed", err);
+    }
     clearToken();
     updateNavForAuth();
-    toast(tr("common.logout_success"));
+    toast(serverOk ? tr("common.logout_success") : tr("common.logout_success"));
+    setProfileMenuOpen(false);
+    closeProfileModal();
     // optional: zur Login-Seite
     // window.location.href = "/login";
   });
@@ -392,20 +1584,21 @@
     const wrap = document.getElementById("hh_wrap");
     const hint = document.getElementById("hh_hint");
     if (!list || !wrap || !hint) return;
+    const setHint = (key) => {
+      hint.style.display = "";
+      setNodeTextByKey(hint, key);
+    };
     const token = getToken();
     if (!token) {
-      hint.style.display = "";
-      hint.textContent = tr("history.prompt_login");
+      setHint("history.prompt_login");
       return;
     }
-    hint.style.display = "";
-    hint.textContent = tr("history.empty");
+    setHint("history.empty");
     (async () => {
       const res = await apiFetch("/profile/health-history/?page=1&per_page=5");
       if (!res.ok) {
         if (res.status === 401) {
-          hint.style.display = "";
-          hint.textContent = tr("history.need_reauth");
+          setHint("history.need_reauth");
         }
         return;
       }
@@ -424,9 +1617,9 @@
       if (entries.length){
         wrap.classList.remove("hidden");
         hint.style.display = "none";
+        delete hint.dataset.i18nKey;
       } else {
-        hint.style.display = "";
-        hint.textContent = tr("history.empty");
+        setHint("history.empty");
       }
     })();
   })();
@@ -592,5 +1785,71 @@
   })();
 
   // ------- Initial UI sync -------
+  applyDatasetTranslations();
   updateNavForAuth();
+
+  window.addEventListener("auth:state-changed", () => {
+    updateNavForAuth();
+  });
+  async function verifyCurrentAuth() {
+    if (authVerifyPromise) return authVerifyPromise;
+    const token = getToken();
+    if (!token) return false;
+    authVerifyPromise = (async () => {
+      try {
+        const resp = await fetch("/auth/me", {
+          headers: { Authorization: `Bearer ${token}` },
+          credentials: "same-origin"
+        });
+        if (!resp.ok) {
+          console.warn("[auth] /auth/me returned", resp.status);
+        }
+        return resp.ok;
+      } catch (err) {
+        console.warn("[auth] verification request failed", err);
+        return false;
+      } finally {
+        authVerifyPromise = null;
+      }
+    })();
+    return authVerifyPromise;
+  }
+
+  async function refreshAccessToken() {
+    if (refreshPromise) return refreshPromise;
+    refreshPromise = (async () => {
+      try {
+        const resp = await fetch("/auth/refresh", {
+          method: "POST",
+          credentials: "same-origin"
+        });
+        if (!resp.ok) {
+          console.warn("[auth] refresh failed with status", resp.status);
+          return "";
+        }
+        const data = await resp.json().catch(() => ({}));
+        const token = data?.access_token;
+        if (token) {
+          setToken(token);
+          return token;
+        }
+        console.warn("[auth] refresh response missing access_token");
+        return "";
+      } catch (err) {
+        console.warn("[auth] refresh request failed", err);
+        return "";
+      } finally {
+        refreshPromise = null;
+      }
+    })();
+    return refreshPromise;
+  }
+
+  async function ensureAccessToken() {
+    const existing = getToken();
+    if (existing) return existing;
+    const refreshed = await refreshAccessToken();
+    return refreshed || "";
+  }
+
 })();

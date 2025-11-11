@@ -44,9 +44,39 @@
       <a href="/" class="brand">My Health App</a>
       <nav class="nav">
         <span id="authBadge" class="badge">Gast</span>
-        <a id="navLogin"    class="btn btn-ghost" href="/login">Login</a>
+        <a id="navLogin" class="btn btn-ghost" href="/login">Login</a>
         <a id="navRegister" class="btn btn-ghost" href="/register">Registrieren</a>
-        <a id="navLogout"   class="btn btn-ghost hidden" href="#">Logout</a>
+
+        <div id="profileMenu" class="profile-menu hidden" data-open="false">
+          <button
+            id="profileToggle"
+            class="btn btn-ghost profile-trigger"
+            type="button"
+            aria-haspopup="true"
+            aria-expanded="false"
+            aria-controls="profileDropdown"
+          >
+            <span id="profileAvatar" class="profile-avatar" aria-hidden="true">👤</span>
+            <span id="profileName" class="profile-label">Profil</span>
+            <span class="profile-caret" aria-hidden="true">▾</span>
+          </button>
+          <div id="profileDropdown" class="profile-dropdown" role="menu">
+            <div class="profile-summary">
+              <div id="profileSummaryLabel" class="profile-summary-label">Angemeldet als</div>
+              <div id="profileEmail" class="profile-summary-email"></div>
+            </div>
+            <div id="profileLanguageSection" class="profile-section" role="none">
+              <div id="profileLanguageLabel" class="profile-section-label">Sprache</div>
+              <div id="profileLanguage" class="profile-language" role="group" aria-labelledby="profileLanguageLabel">
+                <button class="profile-lang" data-lang="de" type="button">DE</button>
+                <button class="profile-lang" data-lang="en" type="button">EN</button>
+              </div>
+            </div>
+            <a id="profileLink" class="profile-item" href="/" role="menuitem">Profil</a>
+            <button id="navLogout" class="profile-item profile-logout" type="button" role="menuitem">Logout</button>
+          </div>
+        </div>
+
         <button id="themeToggle" class="btn btn-ghost" aria-label="Theme umschalten">🌓</button>
       </nav>
     </div>
@@ -62,6 +92,186 @@
 
   <!-- Global Loading Spinner -->
   <div id="spinner" class="spinner hidden" aria-hidden="true"></div>
+
+  <!-- Profile Modal -->
+  <div
+    id="profileModal"
+    class="modal hidden"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="profileModalTitle"
+  >
+    <div class="modal-backdrop" data-dismiss="profileModal"></div>
+    <div class="modal-content" role="document">
+      <header class="modal-header">
+        <h2 id="profileModalTitle" class="modal-title">Profil</h2>
+        <button id="profileModalClose" class="modal-close" type="button" aria-label="Schließen">×</button>
+      </header>
+      <div class="modal-body">
+        <dl class="profile-details">
+          <div>
+            <dt id="profileModalEmailLabel">E-Mail</dt>
+            <dd id="profileModalEmail"></dd>
+          </div>
+          <div>
+            <dt id="profileModalCreatedLabel">Konto erstellt</dt>
+            <dd id="profileModalCreated"></dd>
+          </div>
+          <div>
+            <dt id="profileModalStatusLabel">Status</dt>
+            <dd id="profileModalStatus"></dd>
+          </div>
+          <div>
+            <dt id="profileModalAgeLabel" data-i18n-key="profile.modal.age_label">Age</dt>
+            <dd id="profileModalAgeValue"></dd>
+          </div>
+          <div>
+            <dt id="profileModalSexLabel" data-i18n-key="profile.modal.sex_label">Sex</dt>
+            <dd id="profileModalSexValue"></dd>
+          </div>
+        </dl>
+        <div id="profileModalStats" class="profile-stats"></div>
+        <form id="profileModalForm" class="profile-form" novalidate>
+          <fieldset>
+            <legend class="sr-only" data-i18n-key="profile.modal.form_title">Profile information</legend>
+            <div class="form-row">
+              <label for="profileAge" data-i18n-key="profile.modal.form_age">Age</label>
+              <input id="profileAge" class="input" type="number" min="0" max="120" placeholder="35" />
+            </div>
+            <div class="form-row">
+              <label for="profileSex" data-i18n-key="profile.modal.form_sex">Sex</label>
+              <select id="profileSex" class="input">
+                <option value="" data-i18n-key="profile.modal.sex_placeholder">Select…</option>
+                <option value="female" data-i18n-key="profile.modal.sex_female">Female</option>
+                <option value="male" data-i18n-key="profile.modal.sex_male">Male</option>
+                <option value="other" data-i18n-key="profile.modal.sex_other">Other</option>
+                <option value="unknown" data-i18n-key="profile.modal.sex_unknown_option">Prefer not to say</option>
+              </select>
+            </div>
+          </fieldset>
+          <div class="profile-form-actions">
+            <button id="profileSaveBtn" class="btn btn-primary" type="submit" data-i18n-key="profile.modal.save">Save changes</button>
+            <span id="profileSaveStatus" class="muted" role="status" aria-live="polite"></span>
+          </div>
+        </form>
+        <div class="profile-collections">
+          <section class="profile-collection" id="profileAllergiesSection">
+            <h3 data-i18n-key="profile.collections.allergies.title">Allergies</h3>
+            <ul id="profileAllergiesList" class="profile-list" aria-live="polite"></ul>
+            <form id="profileAllergiesForm" class="profile-inline-form" novalidate>
+              <label class="sr-only" for="profileAllergyInput" data-i18n-key="profile.collections.allergies.label">Allergy</label>
+              <div class="profile-inline-fields">
+                <input id="profileAllergyInput" class="input" type="text" placeholder="Penicillin" required />
+                <button class="btn" type="submit" data-i18n-key="profile.collections.add_button">Add</button>
+              </div>
+              <span id="profileAllergiesStatus" class="muted" role="status" aria-live="polite"></span>
+            </form>
+          </section>
+
+          <section class="profile-collection" id="profileConditionsSection">
+            <h3 data-i18n-key="profile.collections.conditions.title">Conditions</h3>
+            <ul id="profileConditionsList" class="profile-list" aria-live="polite"></ul>
+            <form id="profileConditionsForm" class="profile-inline-form" novalidate>
+              <label class="sr-only" for="profileConditionInput" data-i18n-key="profile.collections.conditions.label">Condition</label>
+              <div class="profile-inline-fields">
+                <input id="profileConditionInput" class="input" type="text" placeholder="Hypertension" required />
+                <button class="btn" type="submit" data-i18n-key="profile.collections.add_button">Add</button>
+              </div>
+              <span id="profileConditionsStatus" class="muted" role="status" aria-live="polite"></span>
+            </form>
+          </section>
+
+          <section class="profile-collection" id="profileMedicationsSection">
+            <h3 data-i18n-key="profile.collections.medications.title">Active medications</h3>
+            <ul id="profileMedicationsList" class="profile-list" aria-live="polite"></ul>
+            <form id="profileMedicationsForm" class="profile-form-grid" novalidate>
+              <div>
+                <label class="sr-only" for="profileMedicationName" data-i18n-key="profile.collections.medications.name_label">Medication</label>
+                <input id="profileMedicationName" class="input" type="text" placeholder="Ibuprofen" required />
+              </div>
+              <div>
+                <label class="sr-only" for="profileMedicationDose" data-i18n-key="profile.collections.medications.dose_label">Dosage</label>
+                <input id="profileMedicationDose" class="input" type="text" placeholder="400 mg" required />
+              </div>
+              <div>
+                <label class="sr-only" for="profileMedicationStart" data-i18n-key="profile.collections.medications.start_label">Start date</label>
+                <input id="profileMedicationStart" class="input" type="date" />
+              </div>
+              <div class="profile-inline-fields">
+                <button class="btn" type="submit" data-i18n-key="profile.collections.add_button">Add</button>
+              </div>
+              <span id="profileMedicationsStatus" class="muted" role="status" aria-live="polite"></span>
+            </form>
+          </section>
+
+          <section class="profile-collection" id="profileContactsSection">
+            <h3 data-i18n-key="profile.collections.contacts.title">Emergency contacts</h3>
+            <ul id="profileContactsList" class="profile-list" aria-live="polite"></ul>
+            <form id="profileContactsForm" class="profile-form-grid" novalidate>
+              <div>
+                <label class="sr-only" for="profileContactName" data-i18n-key="profile.collections.contacts.name_label">Name</label>
+                <input id="profileContactName" class="input" type="text" placeholder="Max Mustermann" required />
+              </div>
+              <div>
+                <label class="sr-only" for="profileContactRelationship" data-i18n-key="profile.collections.contacts.relationship_label">Relationship</label>
+                <input id="profileContactRelationship" class="input" type="text" placeholder="Partner" />
+              </div>
+              <div>
+                <label class="sr-only" for="profileContactPhone" data-i18n-key="profile.collections.contacts.phone_label">Phone</label>
+                <input id="profileContactPhone" class="input" type="tel" placeholder="+49 160 1234567" />
+              </div>
+              <div>
+                <label class="sr-only" for="profileContactEmail" data-i18n-key="profile.collections.contacts.email_label">Email</label>
+                <input id="profileContactEmail" class="input" type="email" placeholder="max@example.com" />
+              </div>
+              <div class="profile-inline-fields">
+                <label class="checkbox">
+                  <input id="profileContactPrimary" type="checkbox" />
+                  <span data-i18n-key="profile.collections.contacts.primary_label">Primary contact</span>
+                </label>
+              </div>
+              <div class="profile-inline-fields">
+                <button class="btn" type="submit" data-i18n-key="profile.collections.add_button">Add</button>
+              </div>
+              <span id="profileContactsStatus" class="muted" role="status" aria-live="polite"></span>
+            </form>
+          </section>
+
+          <section class="profile-collection" id="profileFamilySection">
+            <h3 data-i18n-key="profile.collections.family.title">Family members</h3>
+            <ul id="profileFamilyList" class="profile-list" aria-live="polite"></ul>
+            <form id="profileFamilyForm" class="profile-form-grid" novalidate>
+              <div>
+                <label class="sr-only" for="profileFamilyName" data-i18n-key="profile.collections.family.name_label">Name</label>
+                <input id="profileFamilyName" class="input" type="text" placeholder="Anna Mustermann" required />
+              </div>
+              <div>
+                <label class="sr-only" for="profileFamilyRelationship" data-i18n-key="profile.collections.family.relationship_label">Relationship</label>
+                <input id="profileFamilyRelationship" class="input" type="text" placeholder="Mother" required />
+              </div>
+              <div>
+                <label class="sr-only" for="profileFamilyBirthdate" data-i18n-key="profile.collections.family.birthdate_label">Birthdate</label>
+                <input id="profileFamilyBirthdate" class="input" type="date" />
+              </div>
+              <div class="profile-inline-fields">
+                <button class="btn" type="submit" data-i18n-key="profile.collections.add_button">Add</button>
+              </div>
+              <span id="profileFamilyStatus" class="muted" role="status" aria-live="polite"></span>
+            </form>
+          </section>
+
+          <section class="profile-collection" id="profileHistorySection">
+            <h3 data-i18n-key="profile.collections.history.title">Health checks</h3>
+            <ul id="profileHistoryList" class="profile-list" aria-live="polite"></ul>
+            <p class="muted" data-i18n-key="profile.collections.history.hint">Use the Symptom Checker to create new entries.</p>
+          </section>
+        </div>
+      </div>
+      <footer class="modal-footer">
+        <button id="profileModalCloseFooter" class="btn btn-primary" type="button">Schließen</button>
+      </footer>
+    </div>
+  </div>
 
   <!-- Footer (einmalig, keine doppelte Anzeige) -->
   <footer class="footer">

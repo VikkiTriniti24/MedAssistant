@@ -40,27 +40,90 @@
 
   function saveToken(t) {
     try {
-      if (t && typeof t === "string" && t.length > 20) {
+      if (t && typeof t === "string") {
         localStorage.setItem("access_token", t);
         localStorage.setItem("auth_flag", "1");
       }
     } catch (e) { console.error("localStorage save failed", e); }
   }
+  function setFormDisabled(disabled) {
+    const form = $("#loginForm");
+    if (!form) return;
+    if (disabled) {
+      form.setAttribute("aria-disabled", "true");
+    } else {
+      form.removeAttribute("aria-disabled");
+    }
+    form.querySelectorAll("input, button").forEach((el) => {
+      if (el.id === "btnLogout") return;
+      el.disabled = disabled;
+      if (disabled) el.setAttribute("aria-disabled", "true");
+      else el.removeAttribute("aria-disabled");
+    });
+  }
+
   function clearToken() {
     localStorage.removeItem("access_token");
     localStorage.removeItem("auth_flag");
+    setFormDisabled(false);
+    window.dispatchEvent(new CustomEvent("auth:state-changed"));
   }
 
   // Bereits eingeloggt? Direkt zurück
-  (function precheck() {
+  (async function precheck() {
     const tok = localStorage.getItem("access_token");
-    if (tok) {
-      showMsg(tr("auth.login.already"), "success");
-      setTimeout(() => { window.location.replace("/"); }, 300);
+    if (!tok) return;
+    try {
+      const resp = await fetch("/auth/me", {
+        headers: { "Authorization": `Bearer ${tok}` }
+      });
+      if (resp.ok) {
+        let nextToken = tok;
+        try {
+          const refreshResp = await fetch("/auth/refresh", {
+            method: "POST",
+            credentials: "same-origin"
+          });
+          if (refreshResp.ok) {
+            const refreshData = await refreshResp.json().catch(() => ({}));
+            if (refreshData?.access_token) {
+              nextToken = refreshData.access_token;
+              saveToken(nextToken);
+            }
+          }
+        } catch (refreshErr) {
+          console.warn("refresh failed during login precheck", refreshErr);
+        }
+        if (!nextToken) {
+          clearToken();
+          return;
+        }
+        showMsg(tr("auth.login.already"), "success");
+        window.dispatchEvent(new CustomEvent("auth:state-changed"));
+        setFormDisabled(true);
+        window.location.replace("/");
+      } else if (resp.status === 401) {
+        clearToken();
+        window.dispatchEvent(new CustomEvent("auth:state-changed"));
+      }
+    } catch {
+      clearToken();
+      window.dispatchEvent(new CustomEvent("auth:state-changed"));
     }
   })();
 
-  $("#btnLogout")?.addEventListener("click", () => {
+  $("#btnLogout")?.addEventListener("click", async () => {
+    try {
+      const resp = await fetch("/auth/logout", {
+        method: "POST",
+        credentials: "same-origin"
+      });
+      if (!resp.ok && resp.status !== 401) {
+        console.warn("logout returned status", resp.status);
+      }
+    } catch (err) {
+      console.warn("logout request failed", err);
+    }
     clearToken();
     showMsg(tr("common.logout_success"), "success");
   });
@@ -104,6 +167,8 @@
       }
 
       saveToken(token);
+      window.dispatchEvent(new CustomEvent("auth:state-changed"));
+      setFormDisabled(true);
       showMsg(tr("auth.login.success"), "success");
       setTimeout(() => { window.location.replace("/"); }, 300);
     } catch (err) {
